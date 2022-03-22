@@ -1,0 +1,71 @@
+{
+	"segments_v4": {
+		"aliases": {},
+		"mappings": {
+			"_doc": {
+				"properties": {
+					"bbstar": {
+						"type": "keyword"
+					},
+					"cp": {
+						"type": "keyword"
+					},
+					"dc": {
+						"type": "keyword"
+					},
+					"ds": {
+						"type": "keyword"
+					},
+					"emails": {
+						"type": "keyword"
+					},
+					"entry_context": {
+						"type": "keyword"
+					},
+					"mid": {
+						"type": "keyword"
+					},
+					"mtype": {
+						"type": "keyword"
+					},
+					"phone_numbers": {
+						"type": "keyword"
+					},
+					"sa_city_ids": {
+						"type": "keyword"
+					},
+					"sa_ids": {
+						"type": "keyword"
+					},
+					"source": {
+						"type": "keyword"
+					},
+					"status": {
+						"type": "keyword"
+					}
+				}
+			}
+		},
+		"settings": {
+			"index": {
+				"search": {
+					"slowlog": {
+						"threshold": {
+							"query": {
+								"debug": "300ms"
+							}
+						}
+					}
+				},
+				"number_of_shards": "1",
+				"provided_name": "segments_v4",
+				"creation_date": "1619619154072",
+				"number_of_replicas": "7",
+				"uuid": "3mGZfzIzQ9KkE-S2ATzaZw",
+				"version": {
+					"created": "6050499"
+				}
+			}
+		}
+	}
+}

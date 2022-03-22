@@ -1,0 +1,16 @@
+{
+  "name": "es-script",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "bb-vikaskumar",
+  "license": "ISC",
+  "dependencies": {
+    "elasticsearch": "16.1.1",
+    "bunyan": "^1.8.15",
+    "lodash": "^4.17.21"
+  }
+}
