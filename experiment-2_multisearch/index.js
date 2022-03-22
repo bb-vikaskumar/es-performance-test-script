@@ -5,6 +5,7 @@
         1. Docs don't contain "camp_info" | Fetched fields in response: document_id
         2. Docs contain "camp_info" and "camp_info" is fetch in response | Fetched fields in response: document_id, "camp_info"
 
+    Multiget the documents.
     No. of Docs in index: 1 Lakh
     Total running time: 30 minutes
     Final Results can be seen here: https://docs.google.com/spreadsheets/d/1uINIX6-0XB6LGJKuBN1GwLSEFb54NBx2pYew4d0oVLM/edit#gid=0
@@ -17,10 +18,11 @@ const fs = require('fs')
 const ES_INDEX_NAME = "camp_info_v1";
 const ELASTICSEARCH_IP = "https://vpc-es-benchmarking-test-tg4mvjtk2uzeba4wvby3hanfy4.us-east-1.es.amazonaws.com";
 const ELASTICSEARCH_PORT = 443;
+const SKUS_IN_EACH_SEARCH_REQ = 10;
 
-const ACTIVITY_TYPE = 'create'; // create, fetch
+const ACTIVITY_TYPE = 'multisearch'; // create, search, multisearch
 const TOTAL_DOCS_COUNT = 1;
-const FETCH_TYPE='count'  // time, count
+const ACTIVITY_QTY_TYPE='count';  // time, count
 const BATCH_SIZE = 1;
 const SEARCH_DURATION_IN_MINS = 0.01;
 const WITH_MID = false;
@@ -106,6 +108,31 @@ class ElasticSearchConnector {
                 })
                 .catch(function (err)  {
                     console.log('** error while searching: ', err);
+                    return reject(err);
+                });
+        }
+    }
+
+    static multiSearch(indexName, queries, docType) {
+        let searchQuery = {
+            body: []
+        }
+        queries.query.map(query => {
+            searchQuery.body.push({ index: indexName});
+            searchQuery.body.push({query});
+        });
+
+
+        return new Promise(_msearch);
+        function _msearch(resolve, reject) {
+
+            esClient.msearch(searchQuery)
+                .then(function (res) {
+                    console.log('** multisearch res: ', JSON.stringify(res));
+                    return resolve(res);
+                })
+                .catch(function (err)  {
+                    console.log('** error while multisearching: ', err);
                     return reject(err);
                 });
         }
@@ -267,10 +294,14 @@ function processBatch({docs, from, batchId, batchSize, esIndex=ES_INDEX_NAME}) {
             console.log('write on ', esIndex, ' : ', JSON.stringify(doc));
             return demoPromise({returnVal: 'processed '+ docId+ '_'+ batchId, delay: 2000});
             return ElasticSearchConnector.addDocument(esIndex, docId, doc);
-        } else if(ACTIVITY_TYPE === 'fetch') {
+        } else if(ACTIVITY_TYPE === 'search') {
             console.log('search on ', esIndex, ' : ', JSON.stringify(doc));
             return demoPromise({returnVal: 'processed '+ docId+ '_'+ batchId, delay: 2000});
             return ElasticSearchConnector.search(esIndex, doc);
+        } else if(ACTIVITY_TYPE === 'multisearch') {
+            console.log('multisearch on ', esIndex, ' : ', JSON.stringify(doc));
+            return demoPromise({returnVal: 'processed '+ docId+ '_'+ batchId, delay: 2000});
+            // return ElasticSearchConnector.multiSearch(esIndex, doc);
         } else {
             return demoPromise({returnVal: 'processed '+ docId+ '_'+ batchId, delay: 1000});
         } 
@@ -286,7 +317,7 @@ async function processAllBatches({docs, batchSize, esIndex}) {
 
         let totalDocsCount = docs.length;
         
-        if(ACTIVITY_TYPE === 'fetch' && FETCH_TYPE === 'time') {
+        if(ACTIVITY_TYPE === 'search' && ACTIVITY_QTY_TYPE === 'time') {
             let targetTime = new Date().getTime() + SEARCH_DURATION_IN_MINS * 60 * 1000;
             batchId = 0;
 
@@ -371,6 +402,52 @@ function generateFetchQueries({docs, termsCount}) {
             };
 
             query.query.bool.filter.push({'terms': terms});
+        }
+        queries.push(query);
+    }
+
+    return queries;
+}
+
+function generateMultiSearchQueries({docs, termsCount}) {
+    let queries = [];
+    
+    for(let doc of docs) {
+        let query = {
+            'query': [],
+            "_source": ["camp_info", "campaign_id"]
+        }
+
+        for(let skuIndex=0; skuIndex<termsCount.c_sku_id; skuIndex++) {
+            let query_i = {
+                'bool': {
+                    'filter': []
+                }
+            };
+            for(let field of Object.keys(doc)) {
+                let values;
+                if(field === 'camp_info' || field === 'campaign_id') {
+                    continue;
+                }
+                if(field === 'mid' && !WITH_MID) {
+                    continue;
+                }
+
+                if(!doc.c_sku_id[skuIndex]) {
+                    console.log('*** error: ', {doc, skuIndex, skuTermsCount: termsCount.c_sku_id.length});
+                }
+
+                values = field==='c_sku_id' ? [doc.c_sku_id[skuIndex]] : generateCombination({list: doc[field], size: termsCount[field]});
+                if(field != 'c_sku_id' && field !== 'mtype' && field !== 'status') {
+                    values = [...new Set(['all', ...values])];
+                }
+                let terms = {
+                    [field]: values
+                };
+
+                query_i.bool.filter.push({'terms': terms});
+            }
+            query.query.push(query_i);
         }
         queries.push(query);
     }
@@ -503,7 +580,7 @@ async function fetchRecords({docCount, batchSize}) {
         sa_ids: 1,
         mid: 1,
         campaign_id: 1,
-        c_sku_id: 1,
+        c_sku_id: SKUS_IN_EACH_SEARCH_REQ,
         c_brand: 1,
         c_tlc: 1,
         c_mlc: 1,
@@ -546,8 +623,72 @@ async function fetchRecords({docCount, batchSize}) {
         });
 }
 
+
+async function fetchRecordsViaMultiSearch({docCount, batchSize}) {
+    let termsCount = {
+        mtype: 1,
+        dc: 1,
+        ds: 2,
+        bbstar: 2,
+        status: 1,
+        source: 1,
+        emails: 1,
+        phone_numbers: 1,
+        cp: 1,
+        entry_context: 1,
+        sa_city_ids: 1,
+        sa_ids: 1,
+        mid: 1,
+        campaign_id: 1,
+        c_sku_id: SKUS_IN_EACH_SEARCH_REQ,
+        c_brand: 1,
+        c_tlc: 1,
+        c_mlc: 1,
+        c_llc: 1,
+        c_group: 1,
+        r_sku_id: 1,
+        r_brand: 1,
+        r_tlc: 1,
+        r_mlc: 1,
+        r_llc: 1,
+        r_group: 1,
+    };
+
+    console.log('Reading records from ', savedRecordFile);
+    let savedDocs = require(savedRecordFile).records;
+    let allDocs = [];
+    for(let i=0; i<docCount; i++) {
+       allDocs.push(savedDocs[i%savedDocs.length]);
+    }
+
+    let allQueries = generateMultiSearchQueries({docs: allDocs, termsCount: termsCount});
+    
+    let siegeUrls = [];
+    for(let query of allQueries.slice(0, SEIGE_URLS_TO_KEEP)) {
+        let siegeUrl = `${ELASTICSEARCH_IP}/${ES_INDEX_FINAL}/_search POST ${JSON.stringify(query)}`;
+        siegeUrls.push(siegeUrl);
+    }
+
+    fs.writeFile(`siegeUrls${WITH_MID ? '_withMid': ''}.txt`, siegeUrls.join('\n'), (err) => {
+        if (err) throw err;
+    })
+
+    let startTime = new Date();
+    processAllBatches({docs: allQueries, from: 0, batchId: 0, batchSize: batchSize, esIndex: ES_INDEX_FINAL})
+        .then((res) => { 
+            console.log({batchResults: batchResults, totalReadTime: `${new Date() - startTime}ms`})
+        })
+        .catch((e) => {
+            console.log({batchResults: batchResults, totalReadTime: `${new Date() - startTime}ms`, error: e});
+        });
+}
+
 if(ACTIVITY_TYPE === 'create') {
     createRecords({docCount:TOTAL_DOCS_COUNT, batchSize: BATCH_SIZE});
-} else if (ACTIVITY_TYPE === 'fetch') {
+} else if (ACTIVITY_TYPE === 'search') {
     fetchRecords({docCount:TOTAL_DOCS_COUNT, batchSize: BATCH_SIZE});
+}
+
+else if (ACTIVITY_TYPE === 'multisearch') {
+    fetchRecordsViaMultiSearch({docCount:TOTAL_DOCS_COUNT, batchSize: BATCH_SIZE});
 }
