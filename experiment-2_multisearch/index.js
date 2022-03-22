@@ -2,10 +2,10 @@
 
 /*
     This is a test to compare performance of ES in below 2 scenarios:
-        1. Keep CET in one index. And 5 Lakh Mid in another index.
-        2. Merge results from both indices. 
+        1. Docs don't contain "camp_info" | Fetched fields in response: document_id
+        2. Docs contain "camp_info" and "camp_info" is fetch in response | Fetched fields in response: document_id, "camp_info"
 
-    No. of Docs in index: 5k
+    No. of Docs in index: 1 Lakh
     Total running time: 30 minutes
     Final Results can be seen here: https://docs.google.com/spreadsheets/d/1uINIX6-0XB6LGJKuBN1GwLSEFb54NBx2pYew4d0oVLM/edit#gid=0
 */

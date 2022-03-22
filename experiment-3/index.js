@@ -4,7 +4,7 @@
     This is a test to compare performance of ES in below 2 scenarios:
         1. Split docs with more than 50k mids
 
-    No. of Docs in index: 1 Lakh
+    No. of Docs in index: 5k
     Total running time: 30 minutes
     Final Results can be seen here: https://docs.google.com/spreadsheets/d/1uINIX6-0XB6LGJKuBN1GwLSEFb54NBx2pYew4d0oVLM/edit#gid=0
 */
