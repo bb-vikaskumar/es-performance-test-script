@@ -20,11 +20,11 @@ const ELASTICSEARCH_IP = "https://vpc-es-benchmarking-test-tg4mvjtk2uzeba4wvby3h
 const ELASTICSEARCH_PORT = 443;
 const SKUS_IN_EACH_SEARCH_REQ = 10;
 
-const ACTIVITY_TYPE = 'create'; // create, search, multisearch
+const ACTIVITY_TYPE = 'multisearch'; // create, search, multisearch
 const TOTAL_DOCS_COUNT = 20;
-const ACTIVITY_QTY_TYPE='count';  // time, count
+const ACTIVITY_QTY_TYPE='time';  // time, count
 const BATCH_SIZE = 1;
-const SEARCH_DURATION_IN_MINS = 0.01;
+const SEARCH_DURATION_IN_MINS = 0.1;
 const WITH_MID = false;
 const MIDS_COUNT_PER_DOC = 10;
 const MIDS_SPACE_COUNT = MIDS_COUNT_PER_DOC * 30;
@@ -74,7 +74,7 @@ class ElasticSearchConnector {
                 body: payload
             })
                 .then(function (res) {
-                    console.log('** added res: ', res);
+                    // console.log('** added res: ', res);
                     return resolve({"campaign_id":_id,"res":res,"payload":payload});
                 })
                 .catch(function (err)  {
@@ -103,7 +103,7 @@ class ElasticSearchConnector {
 
             esClient.search(searchQuery)
                 .then(function (res) {
-                    console.log('** search res: ', JSON.stringify(res));
+                    // console.log('** search res: ', JSON.stringify(res));
                     return resolve(res);
                 })
                 .catch(function (err)  {
@@ -128,7 +128,7 @@ class ElasticSearchConnector {
 
             esClient.msearch(searchQuery)
                 .then(function (res) {
-                    console.log('** multisearch res: ', JSON.stringify(res));
+                    // console.log('** multisearch res: ', JSON.stringify(res));
                     return resolve(res);
                 })
                 .catch(function (err)  {
@@ -291,16 +291,16 @@ function processBatch({docs, from, batchId, batchSize, esIndex=ES_INDEX_NAME}) {
     return Promise.all(_.map(batchDocs, (doc, docIndex) => {
         let docId = (batchId * batchSize) + docIndex;
         if(ACTIVITY_TYPE === 'create') {
-            console.log('write on ', esIndex, ' : ', JSON.stringify(doc));
-            return demoPromise({returnVal: 'processed '+ docId+ '_'+ batchId, delay: 2000});
+            // console.log('write on ', esIndex, ' : ', JSON.stringify(doc));
+            // return demoPromise({returnVal: 'processed '+ docId+ '_'+ batchId, delay: 2000});
             return ElasticSearchConnector.addDocument(esIndex, docId, doc);
         } else if(ACTIVITY_TYPE === 'search') {
-            console.log('search on ', esIndex, ' : ', JSON.stringify(doc));
-            return demoPromise({returnVal: 'processed '+ docId+ '_'+ batchId, delay: 2000});
+            // console.log('search on ', esIndex, ' : ', JSON.stringify(doc));
+            // return demoPromise({returnVal: 'processed '+ docId+ '_'+ batchId, delay: 2000});
             return ElasticSearchConnector.search(esIndex, doc);
         } else if(ACTIVITY_TYPE === 'multisearch') {
-            console.log('multisearch on ', esIndex, ' : ', JSON.stringify(doc));
-            return demoPromise({returnVal: 'processed '+ docId+ '_'+ batchId, delay: 2000});
+            // console.log('multisearch on ', esIndex, ' : ', JSON.stringify(doc));
+            // return demoPromise({returnVal: 'processed '+ docId+ '_'+ batchId, delay: 2000});
             return ElasticSearchConnector.multiSearch(esIndex, doc);
         } else {
             return demoPromise({returnVal: 'processed '+ docId+ '_'+ batchId, delay: 1000});
@@ -317,7 +317,7 @@ async function processAllBatches({docs, batchSize, esIndex}) {
 
         let totalDocsCount = docs.length;
         
-        if(ACTIVITY_TYPE === 'search' && ACTIVITY_QTY_TYPE === 'time') {
+        if(ACTIVITY_TYPE != 'create' && ACTIVITY_QTY_TYPE === 'time') {
             let targetTime = new Date().getTime() + SEARCH_DURATION_IN_MINS * 60 * 1000;
             batchId = 0;
 
@@ -618,15 +618,15 @@ async function fetchRecords({docCount, batchSize}) {
 
     let allQueries = generateFetchQueries({docs: allDocs, termsCount: termsCount});
     
-    let siegeUrls = [];
-    for(let query of allQueries.slice(0, SEIGE_URLS_TO_KEEP)) {
-        let siegeUrl = `${ELASTICSEARCH_IP}/${ES_INDEX_FINAL}/_search POST ${JSON.stringify(query)}`;
-        siegeUrls.push(siegeUrl);
-    }
+    // let siegeUrls = [];
+    // for(let query of allQueries.slice(0, SEIGE_URLS_TO_KEEP)) {
+    //     let siegeUrl = `${ELASTICSEARCH_IP}/${ES_INDEX_FINAL}/_search POST ${JSON.stringify(query)}`;
+    //     siegeUrls.push(siegeUrl);
+    // }
 
-    fs.writeFile(`siegeUrls${WITH_MID ? '_withMid': ''}.txt`, siegeUrls.join('\n'), (err) => {
-        if (err) throw err;
-    })
+    // fs.writeFile(`siegeUrls${WITH_MID ? '_withMid': ''}.txt`, siegeUrls.join('\n'), (err) => {
+    //     if (err) throw err;
+    // })
 
     let startTime = new Date();
     processAllBatches({docs: allQueries, from: 0, batchId: 0, batchSize: batchSize, esIndex: ES_INDEX_FINAL})
@@ -678,15 +678,15 @@ async function fetchRecordsViaMultiSearch({docCount, batchSize}) {
 
     let allQueries = generateMultiSearchQueries({docs: allDocs, termsCount: termsCount});
     
-    let siegeUrls = [];
-    for(let query of allQueries.slice(0, SEIGE_URLS_TO_KEEP)) {
-        let siegeUrl = `${ELASTICSEARCH_IP}/${ES_INDEX_FINAL}/_search POST ${JSON.stringify(query)}`;
-        siegeUrls.push(siegeUrl);
-    }
+    // let siegeUrls = [];
+    // for(let query of allQueries.slice(0, SEIGE_URLS_TO_KEEP)) {
+    //     let siegeUrl = `${ELASTICSEARCH_IP}/${ES_INDEX_FINAL}/_search POST ${JSON.stringify(query)}`;
+    //     siegeUrls.push(siegeUrl);
+    // }
 
-    fs.writeFile(`siegeUrls${WITH_MID ? '_withMid': ''}.txt`, siegeUrls.join('\n'), (err) => {
-        if (err) throw err;
-    })
+    // fs.writeFile(`siegeUrls${WITH_MID ? '_withMid': ''}.txt`, siegeUrls.join('\n'), (err) => {
+    //     if (err) throw err;
+    // })
 
     let startTime = new Date();
     processAllBatches({docs: allQueries, from: 0, batchId: 0, batchSize: batchSize, esIndex: ES_INDEX_FINAL})
@@ -702,8 +702,6 @@ if(ACTIVITY_TYPE === 'create') {
     createRecords({docCount:TOTAL_DOCS_COUNT, batchSize: BATCH_SIZE});
 } else if (ACTIVITY_TYPE === 'search') {
     fetchRecords({docCount:TOTAL_DOCS_COUNT, batchSize: BATCH_SIZE});
-}
-
-else if (ACTIVITY_TYPE === 'multisearch') {
+} else if (ACTIVITY_TYPE === 'multisearch') {
     fetchRecordsViaMultiSearch({docCount:TOTAL_DOCS_COUNT, batchSize: BATCH_SIZE});
 }
