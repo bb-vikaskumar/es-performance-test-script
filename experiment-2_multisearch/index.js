@@ -253,7 +253,7 @@ function generatePermutedDoc({sourceSpace, addMid}) {
     if(addMid) {
         doc['mid'] = generateCombination({list: sourceSpace.mid, size: MIDS_COUNT_PER_DOC})
     }
-    console.log('* c_sku_id len: ', doc.c_sku_id.length)
+
     return doc;
 }
 
@@ -301,7 +301,7 @@ function processBatch({docs, from, batchId, batchSize, esIndex=ES_INDEX_NAME}) {
         } else if(ACTIVITY_TYPE === 'multisearch') {
             console.log('multisearch on ', esIndex, ' : ', JSON.stringify(doc));
             return demoPromise({returnVal: 'processed '+ docId+ '_'+ batchId, delay: 2000});
-            // return ElasticSearchConnector.multiSearch(esIndex, doc);
+            return ElasticSearchConnector.multiSearch(esIndex, doc);
         } else {
             return demoPromise({returnVal: 'processed '+ docId+ '_'+ batchId, delay: 1000});
         } 
@@ -490,78 +490,92 @@ async function createRecords({docCount, batchSize}) {
 
     console.log(`Generating records from space...`);
     
-    let allDocs = generatePermutedDocs({sourceSpace: sourceSpace, count: docCount});
+    let allDocs = generatePermutedDocs({sourceSpace: sourceSpace, count: docCount/SKUS_IN_EACH_SEARCH_REQ});
     console.log(`Record generation success.`);
 
-    let startTime = new Date();
-    processAllBatches({docs: allDocs, from: 0, batchId: 0, batchSize: batchSize})
-        .then((res) => { 
-            console.log({batchResults: batchResults, totalWriteTime: `${new Date() - startTime}ms`});
-            // Write data in 'Output.txt' .
-            fs.writeFile(`saved_docs.json`, JSON.stringify({records: allDocs}), (err) => {
-                if (err) throw err;
-                console.log(`Records written to saved_docs.json`);
-            })
-        })
-        .then(async (res2) => {
-            if(WITH_MID) {
-                let batchId;
-                let batchSize = 1;
-                let totalDocsCount = TOTAL_DOCS_COUNT;
+    // Write data in 'Output.txt' .
+    fs.writeFile(`saved_docs.json`, JSON.stringify({records: allDocs}), (err) => {
+        if (err) throw err;
+        console.log(`Records(${allDocs.length}) written to saved_docs.json`);
         
-                try {
-                    for(let i=0; i<docCount; i++) {
-                        let addMid = (i*100/totalDocsCount) < MIDS_DOCUMENTS_PERCENT;
-                        let docWithMid = allDocs[i];
-                        let midCount = (i%100 == 0) ? (MIDS_COUNT_PER_DOC*5) : MIDS_COUNT_PER_DOC;
-                        if(addMid) {
-                            docWithMid['mid'] = generateMids({sourceSpace: sourceSpace, size: midCount, addAll: (i%2 === 0)});
-                        } else {
-                            docWithMid['mid'] = ['all'];
-                        }
-                        
-                        console.log(`[${i}] Record generation success (with ${midCount} MID).`);
-                        
-                        batchId = i;
-                        let from = 0;
-                        let batchSize = 1;
-                        let startTime = new Date();
-            
-                        let processedAck = await processBatch({docs: [docWithMid], from, batchId, batchSize, esIndex: ES_INDEX_NAME_WITH_MID});
-            
-                        if(batchId % LOG_MOD === 0) {
-                            batchResults[batchId] = {
-                                timeElapsed: `${new Date() - startTime}ms`,
-                                totalDocsCount: totalDocsCount,
-                                from: from,
-                                batchSize: batchSize                     
-                            }
-                            console.log(`[success] batch: ${batchId} | ${new Date() - startTime}ms`);
-                        }
-
-                        
-                        allDocs[i]['mid'] = docWithMid['mid'].slice(1, 4);
-                    }
-                    // Write data in 'Output.txt' .
-                    fs.writeFile(`saved_docs.json`, JSON.stringify({records: allDocs}), (err) => {
-                        if (err) throw err;
-                        console.log(`Records written to saved_docs.json`);
-                    })
-                        
-                } catch(e) {
-                    batchResults[batchId] = {
-                        error: e.stack,
-                        totalDocsCount: totalDocsCount,
-                        batchId: batchId,
-                        batchSize: batchSize                     
-                    }
-                    console.log(`[error] batch (with mid): ${batchId} | ${new Date() - startTime}ms, error: ${e.stack}`);
-                }
+        let allDocsLength = allDocs.length;
+        for(let i=0; i<allDocsLength; i++) {
+            let clonedDocs = [];
+            for(let j=0; j<SKUS_IN_EACH_SEARCH_REQ; j++) {
+                let cloneDoc = _.cloneDeep(allDocs[i]);
+                cloneDoc.c_sku_id = cloneDoc.c_sku_id.slice(j*SKUS_IN_EACH_SEARCH_REQ, (j+1)*SKUS_IN_EACH_SEARCH_REQ);
+                clonedDocs.push(cloneDoc);
             }
-        })
-        .catch((e) => {
-            console.log({batchResults: batchResults, totalWriteTime: `${new Date() - startTime}ms`, error: e});
-        });
+            allDocs.splice(i, 1, ...clonedDocs);
+        }
+        console.log(`# Total Docs Creating: `, allDocs.length);
+
+        let startTime = new Date();
+        processAllBatches({docs: allDocs, from: 0, batchId: 0, batchSize: batchSize})
+            .then((res) => { 
+                console.log({batchResults: batchResults, totalWriteTime: `${new Date() - startTime}ms`});
+            })
+            .then(async (res2) => {
+                if(WITH_MID) {
+                    let batchId;
+                    let batchSize = 1;
+                    let totalDocsCount = TOTAL_DOCS_COUNT;
+            
+                    try {
+                        for(let i=0; i<docCount; i++) {
+                            let addMid = (i*100/totalDocsCount) < MIDS_DOCUMENTS_PERCENT;
+                            let docWithMid = allDocs[i];
+                            let midCount = (i%100 == 0) ? (MIDS_COUNT_PER_DOC*5) : MIDS_COUNT_PER_DOC;
+                            if(addMid) {
+                                docWithMid['mid'] = generateMids({sourceSpace: sourceSpace, size: midCount, addAll: (i%2 === 0)});
+                            } else {
+                                docWithMid['mid'] = ['all'];
+                            }
+                            
+                            console.log(`[${i}] Record generation success (with ${midCount} MID).`);
+                            
+                            batchId = i;
+                            let from = 0;
+                            let batchSize = 1;
+                            let startTime = new Date();
+                
+                            let processedAck = await processBatch({docs: [docWithMid], from, batchId, batchSize, esIndex: ES_INDEX_NAME_WITH_MID});
+                
+                            if(batchId % LOG_MOD === 0) {
+                                batchResults[batchId] = {
+                                    timeElapsed: `${new Date() - startTime}ms`,
+                                    totalDocsCount: totalDocsCount,
+                                    from: from,
+                                    batchSize: batchSize                     
+                                }
+                                console.log(`[success] batch: ${batchId} | ${new Date() - startTime}ms`);
+                            }
+
+                            
+                            allDocs[i]['mid'] = docWithMid['mid'].slice(1, 4);
+                        }
+                        // Write data in 'Output.txt' .
+                        fs.writeFile(`saved_docs.json`, JSON.stringify({records: allDocs}), (err) => {
+                            if (err) throw err;
+                            console.log(`Records written to saved_docs.json`);
+                        })
+                            
+                    } catch(e) {
+                        batchResults[batchId] = {
+                            error: e.stack,
+                            totalDocsCount: totalDocsCount,
+                            batchId: batchId,
+                            batchSize: batchSize                     
+                        }
+                        console.log(`[error] batch (with mid): ${batchId} | ${new Date() - startTime}ms, error: ${e.stack}`);
+                    }
+                }
+            })
+            .catch((e) => {
+                console.log({batchResults: batchResults, totalWriteTime: `${new Date() - startTime}ms`, error: e});
+            });
+    })
+    
 }
 
 async function fetchRecords({docCount, batchSize}) {
