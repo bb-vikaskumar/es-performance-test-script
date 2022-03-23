@@ -20,8 +20,8 @@ const ELASTICSEARCH_IP = "https://vpc-es-benchmarking-test-tg4mvjtk2uzeba4wvby3h
 const ELASTICSEARCH_PORT = 443;
 const SKUS_IN_EACH_SEARCH_REQ = 10;
 
-const ACTIVITY_TYPE = 'multisearch'; // create, search, multisearch
-const TOTAL_DOCS_COUNT = 1;
+const ACTIVITY_TYPE = 'create'; // create, search, multisearch
+const TOTAL_DOCS_COUNT = 20;
 const ACTIVITY_QTY_TYPE='count';  // time, count
 const BATCH_SIZE = 1;
 const SEARCH_DURATION_IN_MINS = 0.01;
@@ -506,8 +506,9 @@ async function createRecords({docCount, batchSize}) {
                 cloneDoc.c_sku_id = cloneDoc.c_sku_id.slice(j*SKUS_IN_EACH_SEARCH_REQ, (j+1)*SKUS_IN_EACH_SEARCH_REQ);
                 clonedDocs.push(cloneDoc);
             }
-            allDocs.splice(i, 1, ...clonedDocs);
+            allDocs = allDocs.concat(clonedDocs);
         }
+        allDocs.splice(0, allDocsLength);
         console.log(`# Total Docs Creating: `, allDocs.length);
 
         let startTime = new Date();
