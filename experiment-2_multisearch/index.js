@@ -20,7 +20,7 @@ const ELASTICSEARCH_IP = "https://vpc-es-benchmarking-test-tg4mvjtk2uzeba4wvby3h
 const ELASTICSEARCH_PORT = 443;
 const SKUS_IN_EACH_SEARCH_REQ = 10;
 
-const ACTIVITY_TYPE = 'search'; // create, search, multisearch
+const ACTIVITY_TYPE = 'multisearch'; // create, search, multisearch
 const TOTAL_DOCS_COUNT = 1;
 const ACTIVITY_QTY_TYPE='count';  // time, count
 const BATCH_SIZE = 1;
@@ -436,7 +436,7 @@ function generateMultiSearchQueries({docs, termsCount}) {
                     console.log('*** error: ', {doc, skuIndex, skuTermsCount: termsCount.c_sku_id.length});
                 }
 
-                values = field==='c_sku_id' ? [pickOne(doc.c_sku_id)] : generateCombination({list: doc[field], size: termsCount[field]});
+                values = field==='c_sku_id' ? [pickOne({list: doc.c_sku_id})] : generateCombination({list: doc[field], size: termsCount[field]});
                 if(field != 'c_sku_id' && field !== 'mtype' && field !== 'status') {
                     values = [...new Set(['all', ...values])];
                 }
