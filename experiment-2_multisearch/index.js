@@ -436,7 +436,7 @@ function generateMultiSearchQueries({docs, termsCount}) {
                     console.log('*** error: ', {doc, skuIndex, skuTermsCount: termsCount.c_sku_id.length});
                 }
 
-                values = field==='c_sku_id' ? [doc.c_sku_id[skuIndex]] : generateCombination({list: doc[field], size: termsCount[field]});
+                values = field==='c_sku_id' ? [pickOne(doc.c_sku_id)] : generateCombination({list: doc[field], size: termsCount[field]});
                 if(field != 'c_sku_id' && field !== 'mtype' && field !== 'status') {
                     values = [...new Set(['all', ...values])];
                 }
