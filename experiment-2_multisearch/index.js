@@ -20,7 +20,7 @@ const ELASTICSEARCH_IP = "https://vpc-es-benchmarking-test-tg4mvjtk2uzeba4wvby3h
 const ELASTICSEARCH_PORT = 443;
 const SKUS_IN_EACH_SEARCH_REQ = 10;
 
-const ACTIVITY_TYPE = 'multisearch'; // create, search, multisearch
+const ACTIVITY_TYPE = 'search'; // create, search, multisearch
 const TOTAL_DOCS_COUNT = 1;
 const ACTIVITY_QTY_TYPE='count';  // time, count
 const BATCH_SIZE = 1;
@@ -119,7 +119,7 @@ class ElasticSearchConnector {
         }
         queries.query.map(query => {
             searchQuery.body.push({ index: indexName});
-            searchQuery.body.push({query});
+            searchQuery.body.push({query, "_source": ["camp_info", "campaign_id"]});
         });
 
 
@@ -414,8 +414,7 @@ function generateMultiSearchQueries({docs, termsCount}) {
     
     for(let doc of docs) {
         let query = {
-            'query': [],
-            "_source": ["camp_info", "campaign_id"]
+            'query': []
         }
 
         for(let skuIndex=0; skuIndex<termsCount.c_sku_id; skuIndex++) {
@@ -503,6 +502,7 @@ async function createRecords({docCount, batchSize}) {
             let clonedDocs = [];
             for(let j=0; j<SKUS_IN_EACH_SEARCH_REQ; j++) {
                 let cloneDoc = _.cloneDeep(allDocs[i]);
+                cloneDoc.campaign_id = pickOne({list: sourceSpace.campaign_id});
                 cloneDoc.c_sku_id = cloneDoc.c_sku_id.slice(j*SKUS_IN_EACH_SEARCH_REQ, (j+1)*SKUS_IN_EACH_SEARCH_REQ);
                 clonedDocs.push(cloneDoc);
             }
