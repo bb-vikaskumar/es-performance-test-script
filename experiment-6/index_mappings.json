@@ -1,0 +1,18 @@
+curl -H 'Content-Type: application/json' -XGET "https://vpc-es-benchmarking-test-tg4mvjtk2uzeba4wvby3hanfy4.us-east-1.es.amazonaws.com/only_mids/_mappings?pretty"
+curl --header "Content-Type: application/json" -XGET "https://vpc-es-benchmarking-test-tg4mvjtk2uzeba4wvby3hanfy4.us-east-1.es.amazonaws.com/_cat/indices?pretty"
+
+curl -H 'Content-Type: application/json' -XGET "https://vpc-es-benchmarking-test-tg4mvjtk2uzeba4wvby3hanfy4.us-east-1.es.amazonaws.com/only_mids/_mappings?pretty"
+
+curl -H 'Content-Type: application/json' -XDELETE "https://vpc-es-benchmarking-test-tg4mvjtk2uzeba4wvby3hanfy4.us-east-1.es.amazonaws.com/only_mids"
+
+curl -H 'Content-Type: application/json' -XPUT "https://vpc-es-benchmarking-test-tg4mvjtk2uzeba4wvby3hanfy4.us-east-1.es.amazonaws.com/only_mids" -d '{
+    "mappings": {
+		"_doc": {
+			"properties": {
+				"mid": {
+					"type": "keyword"
+				}
+			}
+		}
+	}
+}'

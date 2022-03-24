@@ -1,0 +1,1 @@
+curl --header "Content-Type: application/json" -XGET "https://vpc-es-benchmarking-test-tg4mvjtk2uzeba4wvby3hanfy4.us-east-1.es.amazonaws.com/_cat/indices?pretty"
