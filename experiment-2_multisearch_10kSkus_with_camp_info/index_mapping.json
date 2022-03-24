@@ -86,6 +86,9 @@ curl -H 'Content-Type: application/json' -XPUT "https://vpc-es-benchmarking-test
         },
         "tenant" : {
           "type" : "keyword"
+        },
+        "camp_info" : {
+          "type" : "keyword"
         }
       }
     }

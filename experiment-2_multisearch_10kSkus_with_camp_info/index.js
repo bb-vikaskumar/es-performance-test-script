@@ -220,7 +220,6 @@ function generateCombination({list, size}) {
 }
 
 function pickOne({list}) {
-    console.log('** list: ', list);
     return list[Math.floor(Math.random() * list.length)];
 }
 
@@ -289,7 +288,6 @@ function processBatch({docs, from, batchId, batchSize, esIndex=ES_INDEX_NAME}) {
     from = from % totalDocsCount;
     let to = from+batchSize;
     let batchDocs = docs.slice(from, to);
-    console.log('** ***8', docs.length, {from, to})
     if(to > docs.length) {
         batchDocs = batchDocs.concat(docs.slice(0, to-totalDocsCount))
     }

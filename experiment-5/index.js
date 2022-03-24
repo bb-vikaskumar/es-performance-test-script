@@ -2,7 +2,7 @@
 
 /*
     This is a test to compare performance of ES in below 2 scenarios:
-        1. Keep CET in one index. Split 5 Lakh Mid into docs with 50k in another index.
+        1. Keep CET in one index. Split 3 Lakh Mid into docs with 50k in another index.
         2. Merge results from both indices. 
     
     No. of Docs in index: 5k
