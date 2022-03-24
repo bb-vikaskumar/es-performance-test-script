@@ -17,13 +17,13 @@ let elasticsearch = require('elasticsearch');
 let _ = require('lodash');
 const fs = require('fs')
   
-const ES_INDEX_NAME = "camp_info_v1";
+const ES_INDEX_NAME = "camp_doc_10k_sku";
 const ELASTICSEARCH_IP = "https://vpc-es-benchmarking-test-tg4mvjtk2uzeba4wvby3hanfy4.us-east-1.es.amazonaws.com";
 const ELASTICSEARCH_PORT = 443;
 const SKUS_PER_DOC = 10000;
 const SKUS_IN_EACH_SEARCH_REQ = 10;
 
-const ACTIVITY_TYPE = 'multisearch'; // create, search, multisearch
+const ACTIVITY_TYPE = 'create'; // create, search, multisearch
 const TOTAL_DOCS_COUNT = 10;
 const ACTIVITY_QTY_TYPE='count';  // time, count
 const BATCH_SIZE = 1;
@@ -492,23 +492,27 @@ async function createRecords({docCount, batchSize}) {
     let allDocs = generatePermutedDocs({sourceSpace: sourceSpace, count: docCount/SKUS_IN_EACH_SEARCH_REQ});
     console.log(`Record generation success.`);
 
-    // Write data in 'Output.txt' .
-    fs.writeFile(`saved_docs.json`, JSON.stringify({records: allDocs}), (err) => {
-        if (err) throw err;
-        console.log(`Records(${allDocs.length}) written to saved_docs.json`);
-        
-        let allDocsLength = allDocs.length;
-        for(let i=0; i<allDocsLength; i++) {
-            let clonedDocs = [];
-            for(let j=0; j<SKUS_IN_EACH_SEARCH_REQ; j++) {
-                let cloneDoc = _.cloneDeep(allDocs[i]);
-                cloneDoc.c_sku_id = cloneDoc.c_sku_id.slice(j*SKUS_PER_DOC, (j+1)*SKUS_PER_DOC);
-                clonedDocs.push(cloneDoc);
-            }
-            allDocs = allDocs.concat(clonedDocs);
+    let allMiniDocs = [];
+    let allDocsLength = allDocs.length;
+    for(let i=0; i<allDocsLength; i++) {
+        let clonedDocs = [];
+        for(let j=0; j<SKUS_IN_EACH_SEARCH_REQ; j++) {
+            let cloneDoc = _.cloneDeep(allDocs[i]);
+            cloneDoc.c_sku_id = cloneDoc.c_sku_id.slice(j*SKUS_PER_DOC, (j+1)*SKUS_PER_DOC);
+            clonedDocs.push(cloneDoc);
+            let miniDoc = _.cloneDeep(cloneDoc);
+            miniDoc.c_sku_id = cloneDoc.c_sku_id.slice(0, 10);
+            allMiniDocs.push(miniDoc);
         }
-        allDocs.splice(0, allDocsLength);
-        console.log(`# Total Docs Creating: `, allDocs.length);
+        allDocs = allDocs.concat(clonedDocs);
+    }
+    allDocs.splice(0, allDocsLength);
+    console.log(`# Total Docs Creating: `, allDocs.length);
+
+    // Write data in 'Output.txt' .
+    fs.writeFile(`saved_docs.json`, JSON.stringify({records: allMiniDocs}), (err) => {
+        if (err) throw err;
+        console.log(`Records(${allMiniDocs.length}) written to saved_docs.json`);
 
         let startTime = new Date();
         processAllBatches({docs: allDocs, from: 0, batchId: 0, batchSize: batchSize})
