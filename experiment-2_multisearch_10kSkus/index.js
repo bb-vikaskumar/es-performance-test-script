@@ -420,7 +420,7 @@ function generateMultiSearchQueries({docs, termsCount}) {
 
         for(let skuIndex=0; skuIndex<termsCount.c_sku_id; skuIndex++) {
             let doc = docs[i];
-            let docJ = docs[i*termsCount.c_sku_id + skuIndex];
+            let docJ = docs[i + skuIndex];
             let query_i = {
                 'bool': {
                     'filter': []
