@@ -20,11 +20,11 @@ const fs = require('fs')
 const ES_INDEX_NAME = "camp_doc_10k_sku";
 const ELASTICSEARCH_IP = "https://vpc-es-benchmarking-test-tg4mvjtk2uzeba4wvby3hanfy4.us-east-1.es.amazonaws.com";
 const ELASTICSEARCH_PORT = 443;
-const SKUS_PER_DOC = 10000;
-const SKUS_IN_EACH_SEARCH_REQ = 10;
+const SKUS_PER_DOC = 20;
+const SKUS_IN_EACH_SEARCH_REQ = 50;
 
 const ACTIVITY_TYPE = 'create'; // create, search, multisearch
-const TOTAL_DOCS_COUNT = 10;
+const TOTAL_DOCS_COUNT = 10000;
 const ACTIVITY_QTY_TYPE='count';  // time, count
 const BATCH_SIZE = 1;
 const SEARCH_DURATION_IN_MINS = 0.01;
