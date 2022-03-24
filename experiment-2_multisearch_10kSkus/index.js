@@ -413,12 +413,14 @@ function generateFetchQueries({docs, termsCount}) {
 function generateMultiSearchQueries({docs, termsCount}) {
     let queries = [];
     
-    for(let doc of docs) {
+    for(let i=0; i<docs.length; i+=termsCount.c_sku_id) {
         let query = {
             'query': []
         }
 
         for(let skuIndex=0; skuIndex<termsCount.c_sku_id; skuIndex++) {
+            let doc = docs[i];
+            let docJ = docs[i*termsCount.c_sku_id + skuIndex];
             let query_i = {
                 'bool': {
                     'filter': []
@@ -437,7 +439,7 @@ function generateMultiSearchQueries({docs, termsCount}) {
                     console.log('*** error: ', {doc, skuIndex, skuTermsCount: termsCount.c_sku_id.length});
                 }
 
-                values = field==='c_sku_id' ? [pickOne({list: doc.c_sku_id})] : generateCombination({list: doc[field], size: termsCount[field]});
+                values = field==='c_sku_id' ? [pickOne({list: docJ.c_sku_id})] : generateCombination({list: doc[field], size: termsCount[field]});
                 if(field != 'c_sku_id' && field !== 'mtype' && field !== 'status') {
                     values = [...new Set(['all', ...values])];
                 }
@@ -501,7 +503,7 @@ async function createRecords({docCount, batchSize}) {
             cloneDoc.c_sku_id = cloneDoc.c_sku_id.slice(j*SKUS_PER_DOC, (j+1)*SKUS_PER_DOC);
             clonedDocs.push(cloneDoc);
             let miniDoc = _.cloneDeep(cloneDoc);
-            miniDoc.c_sku_id = cloneDoc.c_sku_id.slice(0, 10);
+            miniDoc.c_sku_id = cloneDoc.c_sku_id.slice(0, SKUS_IN_EACH_SEARCH_REQ);
             allMiniDocs.push(miniDoc);
         }
         allDocs = allDocs.concat(clonedDocs);
