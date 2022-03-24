@@ -20,13 +20,13 @@ const fs = require('fs')
 const ES_INDEX_NAME = "camp_doc_10k_sku";
 const ELASTICSEARCH_IP = "https://vpc-es-benchmarking-test-tg4mvjtk2uzeba4wvby3hanfy4.us-east-1.es.amazonaws.com";
 const ELASTICSEARCH_PORT = 443;
-const SKUS_PER_DOC = 20;
+const SKUS_PER_DOC = 100;
 const SKUS_IN_EACH_SEARCH_REQ = 50;
 
 const ACTIVITY_TYPE = 'create'; // create, search, multisearch
-const TOTAL_DOCS_COUNT = 1000;
-const ACTIVITY_QTY_TYPE='time';  // time, count
-const BATCH_SIZE = 5;
+const TOTAL_DOCS_COUNT = 1;
+const ACTIVITY_QTY_TYPE='count';  // time, count
+const BATCH_SIZE = 1;
 const SEARCH_DURATION_IN_MINS = 0.0001;
 const WITH_MID = false;
 const MIDS_COUNT_PER_DOC = 10;
@@ -122,7 +122,7 @@ class ElasticSearchConnector {
         }
         queries.query.map(query => {
             searchQuery.body.push({ index: indexName});
-            searchQuery.body.push({query, "_source": []});
+            searchQuery.body.push({query, "_source": ["camp_info", "campaign_id"]});
         });
 
 
@@ -238,6 +238,7 @@ function generatePermutedDoc({sourceSpace, addMid}) {
         "entry_context": generateCombination({list: sourceSpace.entry_context, size: 2}),
         "sa_city_ids": generateCombination({list: sourceSpace.sa_city_ids, size: 4}),
         "sa_ids": generateCombination({list: sourceSpace.sa_ids, size: 1}),
+        "campaign_id": pickOne({list: sourceSpace.campaign_id}),
         "c_sku_id": generateCombination({list: sourceSpace.c_sku_id, size: SKUS_PER_DOC*SKUS_IN_EACH_SEARCH_REQ}),
         "c_brand": generateCombination({list: sourceSpace.c_brand, size: 3}),
         "c_tlc": generateCombination({list: sourceSpace.c_tlc, size: 3}),
@@ -250,6 +251,7 @@ function generatePermutedDoc({sourceSpace, addMid}) {
         "r_mlc": generateCombination({list: sourceSpace.r_mlc, size: 2}),
         "r_llc": generateCombination({list: sourceSpace.r_llc, size: 2}),
         "r_group": generateCombination({list: sourceSpace.r_group, size: 2}),
+        "camp_info": generateCombination({list: sourceSpace.camp_info, size: 1}),
     
     };
     if(addMid) {
@@ -384,7 +386,7 @@ function generateFetchQueries({docs, termsCount}) {
                     'filter': []
                 }
             },
-            "_source": []
+            "_source": ["camp_info", "campaign_id"]
         }
         for(let field of Object.keys(doc)) {
             let values;
