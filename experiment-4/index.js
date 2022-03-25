@@ -2,7 +2,7 @@
 
 /*
     This is a test to compare performance of ES in below 2 scenarios:
-        1. Keep CET in one index. And 5 Lakh Mid in another index.
+        1. Keep CET in one index. And 2.5 Lakh Mid in another index.
         2. Merge results from both indices. 
 
     No. of Docs in index: 5k
@@ -14,22 +14,23 @@ let elasticsearch = require('elasticsearch');
 let _ = require('lodash');
 const fs = require('fs')
   
-const ES_INDEX_NAME = "camp_info_v1";
+const ES_INDEX_NAME = "camp_only";
+const ES_INDEX_WITH_MID_NAME = "mid_only";
 const ELASTICSEARCH_IP = "https://vpc-es-benchmarking-test-tg4mvjtk2uzeba4wvby3hanfy4.us-east-1.es.amazonaws.com";
 const ELASTICSEARCH_PORT = 443;
 
-const ACTIVITY_TYPE = 'create'; // create, fetch
-const TOTAL_DOCS_COUNT = 1;
-const FETCH_TYPE='count'  // time, count
-const BATCH_SIZE = 1;
+const ACTIVITY_TYPE = 'fetch'; // create, fetch
+const TOTAL_DOCS_COUNT = 5;
+const ACTIVITY_QTY_TYPE='count'  // time, count
+const BATCH_SIZE = 5;
 const SEARCH_DURATION_IN_MINS = 0.01;
-const WITH_MID = false;
+const WITH_MID = true;
 const MIDS_COUNT_PER_DOC = 10;
 const MIDS_SPACE_COUNT = MIDS_COUNT_PER_DOC * 30;
-const MIDS_DOCUMENTS_PERCENT = 70;
+const MIDS_DOCUMENTS_PERCENT = 100;
 const LOG_MOD = 500; // every LOD_MOD record will get logged
 const SEIGE_URLS_TO_KEEP = 3000;
-const ES_INDEX_FINAL = ES_INDEX_NAME;
+const ES_INDEX_FINAL = WITH_MID ? ES_INDEX_WITH_MID_NAME : ES_INDEX_NAME;
 
 let savedRecordFile = `./saved_docs.json`;
 
@@ -110,6 +111,31 @@ class ElasticSearchConnector {
                 });
         }
     }
+
+    static multiSearch(indexName, queries, docType) {
+        let searchQuery = {
+            body: []
+        }
+        queries.query.map(query => {
+            searchQuery.body.push({ index: indexName});
+            searchQuery.body.push({query, "_source": []});
+        });
+
+
+        return new Promise(_msearch);
+        function _msearch(resolve, reject) {
+
+            esClient.msearch(searchQuery)
+                .then(function (res) {
+                    console.log('** multisearch res: ', JSON.stringify(res));
+                    return resolve(res);
+                })
+                .catch(function (err)  {
+                    console.log('** error while multisearching: ', err);
+                    return reject(err);
+                });
+        }
+    }
 }
 
 
@@ -179,14 +205,14 @@ function generateCombination({list, size}) {
     if(!list || !list.length) {
         return [];
     }
-    if(size === list.length) {
+    if(size >= list.length) {
         return list;
     }
-    let comb = [];
-    for(let j=0; j<size; j++){
-        comb.push(list[Math.floor(Math.random() * list.length)]);
+    let comb = new Set();
+    while(comb.size < size){
+        comb.add(list[Math.floor(Math.random() * list.length)]);
     }
-    return [...new Set(comb)];
+    return [...comb];
 }
 
 function pickOne({list}) {
@@ -268,10 +294,10 @@ function processBatch({docs, from, batchId, batchSize, esIndex=ES_INDEX_NAME}) {
             return demoPromise({returnVal: 'processed '+ docId+ '_'+ batchId, delay: 2000});
             return ElasticSearchConnector.addDocument(esIndex, docId, doc);
         } else if(ACTIVITY_TYPE === 'fetch') {
-            console.log('search on ', esIndex, ' : ', JSON.stringify(doc));
+            console.log('multisearch on ', esIndex, ' : ', JSON.stringify(doc));
             return demoPromise({returnVal: 'processed '+ docId+ '_'+ batchId, delay: 2000});
-            return ElasticSearchConnector.search(esIndex, doc);
-        } else {
+            return ElasticSearchConnector.multiSearch(esIndex, doc);
+        }else {
             return demoPromise({returnVal: 'processed '+ docId+ '_'+ batchId, delay: 1000});
         } 
     }))
@@ -286,7 +312,7 @@ async function processAllBatches({docs, batchSize, esIndex}) {
 
         let totalDocsCount = docs.length;
         
-        if(ACTIVITY_TYPE === 'fetch' && FETCH_TYPE === 'time') {
+        if(ACTIVITY_TYPE === 'fetch' && ACTIVITY_QTY_TYPE === 'time') {
             let targetTime = new Date().getTime() + SEARCH_DURATION_IN_MINS * 60 * 1000;
             batchId = 0;
 
@@ -343,35 +369,61 @@ async function processAllBatches({docs, batchSize, esIndex}) {
 function generateFetchQueries({docs, termsCount}) {
     let queries = [];
     
-    for(let doc of docs) {
-        let query = {
+    for(let i=0; i<docs.length; i+=2) {
+
+        let normalDoc = docs[i];
+        let docWithMid = docs[i+1];
+
+        let query_normal = {
             'query': {
                 'bool': {
                     'filter': []
                 }
-            },
-            "_source": ["camp_info", "campaign_id"]
-        }
-        for(let field of Object.keys(doc)) {
+            }
+        };
+
+        for(let field of Object.keys(normalDoc)) {
             let values;
             if(field === 'camp_info' || field === 'campaign_id') {
                 continue;
             }
-            if(field === 'mid' && !WITH_MID) {
+            if(field === 'mid') {
                 continue;
             }
 
-            values = generateCombination({list: doc[field], size: termsCount[field]});
-            if(field !== 'mtype' && field !== 'status') {
+            values = generateCombination({list: normalDoc[field], size: termsCount[field]});
+            if(field != 'c_sku_id' && field !== 'mtype' && field !== 'status') {
                 values = [...new Set(['all', ...values])];
-                
             }
             let terms = {
                 [field]: values
             };
 
-            query.query.bool.filter.push({'terms': terms});
+            query_normal.query.bool.filter.push({'terms': terms});
         }
+
+        let query_mid = {
+            'query': {
+                'bool': {
+                    'filter': []
+                }
+            }
+        };
+
+        for(let field of Object.keys(docWithMid)) {
+            let values;
+            values = generateCombination({list: docWithMid[field], size: termsCount[field]});
+            let terms = {
+                [field]: values
+            };
+            query_mid.query.bool.filter.push({'terms': terms});
+        }
+
+        let query = [];
+        query.push({index: ES_INDEX_NAME});
+        query.push({query: query_normal, "_source": ["camp_info", "campaign_id"]});
+        query.push({index: ES_INDEX_WITH_MID_NAME});
+        query.push({query_normal, "_source": false});
         queries.push(query);
     }
 
@@ -395,7 +447,7 @@ async function createRecords({docCount, batchSize}) {
         sa_ids: ['all', ...generateSeries({from: 1, count: 1000})],
         mid: ['all', ...generateSeries({from: 1, count: MIDS_SPACE_COUNT})],
         campaign_id: [...generateSeries({from: 1000000, count: 20})],
-        c_sku_id: [...generateSeries({from: 1000000, count: 100})],
+        c_sku_id: [...generateSeries({from: 1000000, count: 10000})],
         c_brand: ['all', ...generateStrings({count: 1000})],
         c_tlc: ['all', ...generateStrings({count: 1000})],
         c_mlc: ['all', ...generateStrings({count: 1000})],
@@ -414,17 +466,18 @@ async function createRecords({docCount, batchSize}) {
     console.log(`Generating records from space...`);
     
     let allDocs = generatePermutedDocs({sourceSpace: sourceSpace, count: docCount});
+    let writeDocs = [];
     console.log(`Record generation success.`);
 
     let startTime = new Date();
-    processAllBatches({docs: allDocs, from: 0, batchId: 0, batchSize: batchSize})
+    processAllBatches({docs: allDocs, batchSize: batchSize, esIndex: ES_INDEX_NAME})
         .then((res) => { 
             console.log({batchResults: batchResults, totalWriteTime: `${new Date() - startTime}ms`});
             // Write data in 'Output.txt' .
-            fs.writeFile(`saved_docs.json`, JSON.stringify({records: allDocs}), (err) => {
-                if (err) throw err;
-                console.log(`Records written to saved_docs.json`);
-            })
+            // fs.writeFile(`saved_docs.json`, JSON.stringify({records: allDocs}), (err) => {
+            //     if (err) throw err;
+            //     console.log(`Records written to saved_docs.json`);
+            // })
         })
         .then(async (res2) => {
             if(WITH_MID) {
@@ -434,15 +487,11 @@ async function createRecords({docCount, batchSize}) {
         
                 try {
                     for(let i=0; i<docCount; i++) {
-                        let addMid = (i*100/totalDocsCount) < MIDS_DOCUMENTS_PERCENT;
-                        let docWithMid = allDocs[i];
-                        let midCount = (i%100 == 0) ? (MIDS_COUNT_PER_DOC*5) : MIDS_COUNT_PER_DOC;
-                        if(addMid) {
-                            docWithMid['mid'] = generateMids({sourceSpace: sourceSpace, size: midCount, addAll: (i%2 === 0)});
-                        } else {
-                            docWithMid['mid'] = ['all'];
+                        let midCount = MIDS_COUNT_PER_DOC;
+                        let docWithMid = {
+                            mid: generateMids({sourceSpace: sourceSpace, size: midCount, addAll: (i%2 === 0)})
                         }
-                        
+                                                
                         console.log(`[${i}] Record generation success (with ${midCount} MID).`);
                         
                         batchId = i;
@@ -450,7 +499,7 @@ async function createRecords({docCount, batchSize}) {
                         let batchSize = 1;
                         let startTime = new Date();
             
-                        let processedAck = await processBatch({docs: [docWithMid], from, batchId, batchSize, esIndex: ES_INDEX_NAME_WITH_MID});
+                        let processedAck = await processBatch({docs: [docWithMid], from, batchId, batchSize, esIndex: ES_INDEX_WITH_MID_NAME});
             
                         if(batchId % LOG_MOD === 0) {
                             batchResults[batchId] = {
@@ -462,11 +511,12 @@ async function createRecords({docCount, batchSize}) {
                             console.log(`[success] batch: ${batchId} | ${new Date() - startTime}ms`);
                         }
 
-                        
-                        allDocs[i]['mid'] = docWithMid['mid'].slice(1, 4);
+                        let minDocWithMid = { mid: docWithMid['mid'].slice(1, 4) };
+                        writeDocs.push(allDocs[i]);
+                        writeDocs.push(minDocWithMid);
                     }
                     // Write data in 'Output.txt' .
-                    fs.writeFile(`saved_docs.json`, JSON.stringify({records: allDocs}), (err) => {
+                    fs.writeFile(`saved_docs.json`, JSON.stringify({records: writeDocs}), (err) => {
                         if (err) throw err;
                         console.log(`Records written to saved_docs.json`);
                     })
@@ -520,24 +570,29 @@ async function fetchRecords({docCount, batchSize}) {
     console.log('Reading records from ', savedRecordFile);
     let savedDocs = require(savedRecordFile).records;
     let allDocs = [];
-    for(let i=0; i<docCount; i++) {
-       allDocs.push(savedDocs[i%savedDocs.length]);
+    
+    if(ACTIVITY_QTY_TYPE == 'count') {
+        for(let i=0; i<(2*docCount); i++) {
+            allDocs.push(savedDocs[i%savedDocs.length]);
+         }
+    } else {
+        allDocs = savedDocs;
     }
 
     let allQueries = generateFetchQueries({docs: allDocs, termsCount: termsCount});
     
-    let siegeUrls = [];
-    for(let query of allQueries.slice(0, SEIGE_URLS_TO_KEEP)) {
-        let siegeUrl = `${ELASTICSEARCH_IP}/${ES_INDEX_FINAL}/_search POST ${JSON.stringify(query)}`;
-        siegeUrls.push(siegeUrl);
-    }
+    // let siegeUrls = [];
+    // for(let query of allQueries.slice(0, SEIGE_URLS_TO_KEEP)) {
+    //     let siegeUrl = `${ELASTICSEARCH_IP}/${ES_INDEX_FINAL}/_search POST ${JSON.stringify(query)}`;
+    //     siegeUrls.push(siegeUrl);
+    // }
 
-    fs.writeFile(`siegeUrls${WITH_MID ? '_withMid': ''}.txt`, siegeUrls.join('\n'), (err) => {
-        if (err) throw err;
-    })
+    // fs.writeFile(`siegeUrls${WITH_MID ? '_withMid': ''}.txt`, siegeUrls.join('\n'), (err) => {
+    //     if (err) throw err;
+    // })
 
     let startTime = new Date();
-    processAllBatches({docs: allQueries, from: 0, batchId: 0, batchSize: batchSize, esIndex: ES_INDEX_FINAL})
+    processAllBatches({docs: allQueries, batchSize: batchSize, esIndex: ES_INDEX_FINAL})
         .then((res) => { 
             console.log({batchResults: batchResults, totalReadTime: `${new Date() - startTime}ms`})
         })
