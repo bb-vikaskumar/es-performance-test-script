@@ -467,7 +467,7 @@ async function createRecords({docCount, batchSize}) {
             r_mlc: ['all', ...generateStrings({count: 1000})],
             r_llc: ['all', ...generateStrings({count: 1000})],
             r_group: ['all', ...generateStrings({count: 1000})],
-            camp_info: [generateStrings({count: 5}).toString()+ "{'\''entry_context'\'': [100, 8, 9], '\''offer_category'\'': '\''REGULAR'\'', '\''campaign_theme'\'': '\''[]'\'', '\''discount_type'\'': '\''PERCENT'\'', '\''member_specific'\'': 0, '\''category_breakup'\'': '\''0.00'\'', '\''vendor_breakup'\'': '\''100.00'\'', '\''reward_sku_id'\'': 10000148, '\''redemption_campaign_limit'\'': 9999999, '\''bbstar_campaign'\'': '\''true'\'', '\''redemption_member_limit'\'': 9999999, '\''discount_value'\'': '\''50.00'\'', '\''redemption_order_limit'\'': 9999999, '\''marketing_breakup'\'': '\''0.00'\''}"]
+            camp_info: [generateStrings({count: 5}).toString()+ "{'\''entry_context'\'': [100, 8, 9], '\''offer_category'\'': '\''REGULAR'\'', '\''campaign_theme'\'': '\''[]'\'', '\''discount_type'\'': '\''PERCENT'\'', '\''member_specific'\'': 0, '\''category_breakup'\'': '\''0.00'\'', '\''vendor_breakup'\'': '\''100.00'\'', '\''reward_sku_id'\'': 10000148, '\''redemption_campaign_limit'\'': 9999999, '\''bbstar_campaign'\'': '\''true'\'', '\''redemption_member_limit'\'': 9999999, '\''discount_value'\'': '\''50.00'\'', '\''redemption_order_limit'\'': 9999999, '\''marketing_breakup'\'': '\''0.00'\''}"+ generateStrings({count: 5}).toString()]
         }
 
 
