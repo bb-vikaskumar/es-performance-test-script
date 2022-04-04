@@ -2,7 +2,7 @@
 
 /*
     This is a test to compare performance of ES in below 2 scenarios:
-        1. Keep CET in one index. And 2.5 Lakh Mid in another index.
+        1. Keep CET in one index. And 2.5 Lakh Mid for that doc in another index.
         2. Merge results from both indices. 
 
     No. of Docs in index: 5k
@@ -16,16 +16,18 @@ const fs = require('fs')
   
 const ES_INDEX_NAME = "camp_only";
 const ES_INDEX_WITH_MID_NAME = "mid_only";
-const ELASTICSEARCH_IP = "https://vpc-es-benchmarking-test-tg4mvjtk2uzeba4wvby3hanfy4.us-east-1.es.amazonaws.com";
+// const ELASTICSEARCH_IP = "https://vpc-es-benchmarking-test-tg4mvjtk2uzeba4wvby3hanfy4.us-east-1.es.amazonaws.com";
+const ELASTICSEARCH_IP = "http://127.0.0.1:9200";
 const ELASTICSEARCH_PORT = 443;
 
-const ACTIVITY_TYPE = 'fetch'; // create, fetch
-const TOTAL_DOCS_COUNT = 5;
+const ACTIVITY_TYPE = 'create'; // create, fetch
+const TOTAL_DOCS_COUNT = 40;
+const MAX_DOCS_IN_ONE_GO = 20;
 const ACTIVITY_QTY_TYPE='count'  // time, count
-const BATCH_SIZE = 5;
+const BATCH_SIZE = 2;
 const SEARCH_DURATION_IN_MINS = 0.01;
-const WITH_MID = true;
-const MIDS_COUNT_PER_DOC = 10;
+const WITH_MID = false;
+const MIDS_COUNT_PER_DOC = 250000;
 const MIDS_SPACE_COUNT = MIDS_COUNT_PER_DOC * 30;
 const MIDS_DOCUMENTS_PERCENT = 100;
 const LOG_MOD = 500; // every LOD_MOD record will get logged
@@ -73,7 +75,7 @@ class ElasticSearchConnector {
                 body: payload
             })
                 .then(function (res) {
-                    console.log('** added res: ', res);
+                    // console.log('** added res: ', res);
                     return resolve({"campaign_id":_id,"res":res,"payload":payload});
                 })
                 .catch(function (err)  {
@@ -116,7 +118,7 @@ class ElasticSearchConnector {
         let searchQuery = {
             body: []
         }
-        queries.query.map(query => {
+        queries.map(query => {
             searchQuery.body.push({ index: indexName});
             searchQuery.body.push({query, "_source": []});
         });
@@ -234,7 +236,7 @@ function generatePermutedDoc({sourceSpace, addMid}) {
         "sa_city_ids": generateCombination({list: sourceSpace.sa_city_ids, size: 1}),
         "sa_ids": generateCombination({list: sourceSpace.sa_ids, size: 1}),
         "campaign_id": pickOne({list: sourceSpace.campaign_id}),
-        "c_sku_id": generateCombination({list: sourceSpace.c_sku_id, size: 100}),
+        "c_sku_id": generateCombination({list: sourceSpace.c_sku_id, size: 1}),
         "c_brand": generateCombination({list: sourceSpace.c_brand, size: 1}),
         "c_tlc": generateCombination({list: sourceSpace.c_tlc, size: 1}),
         "c_mlc": generateCombination({list: sourceSpace.c_mlc, size: 1}),
@@ -252,7 +254,6 @@ function generatePermutedDoc({sourceSpace, addMid}) {
     if(addMid) {
         doc['mid'] = generateCombination({list: sourceSpace.mid, size: MIDS_COUNT_PER_DOC})
     }
-    console.log('* c_sku_id len: ', doc.c_sku_id.length)
     return doc;
 }
 
@@ -279,7 +280,7 @@ function demoPromise({returnVal, delay}) {
     });
 }
 
-function processBatch({docs, from, batchId, batchSize, esIndex=ES_INDEX_NAME}) {
+function processBatch({docs, startFrom, from, batchId, batchSize, esIndex=ES_INDEX_NAME}) {
     let totalDocsCount = docs.length;
     from = from % totalDocsCount;
     let to = from+batchSize;
@@ -288,14 +289,14 @@ function processBatch({docs, from, batchId, batchSize, esIndex=ES_INDEX_NAME}) {
         batchDocs = batchDocs.concat(docs.slice(0, to-totalDocsCount))
     }
     return Promise.all(_.map(batchDocs, (doc, docIndex) => {
-        let docId = (batchId * batchSize) + docIndex;
+        let docId = startFrom + (batchId * batchSize) + docIndex;
         if(ACTIVITY_TYPE === 'create') {
-            console.log('write on ', esIndex, ' : ', JSON.stringify(doc));
+            console.log('write on ', '_doc: ', docId, ' | ', esIndex, ' : ', JSON.stringify(doc));
             return demoPromise({returnVal: 'processed '+ docId+ '_'+ batchId, delay: 2000});
             return ElasticSearchConnector.addDocument(esIndex, docId, doc);
         } else if(ACTIVITY_TYPE === 'fetch') {
             console.log('multisearch on ', esIndex, ' : ', JSON.stringify(doc));
-            return demoPromise({returnVal: 'processed '+ docId+ '_'+ batchId, delay: 2000});
+            // return demoPromise({returnVal: 'processed '+ docId+ '_'+ batchId, delay: 2000});
             return ElasticSearchConnector.multiSearch(esIndex, doc);
         }else {
             return demoPromise({returnVal: 'processed '+ docId+ '_'+ batchId, delay: 1000});
@@ -305,7 +306,7 @@ function processBatch({docs, from, batchId, batchSize, esIndex=ES_INDEX_NAME}) {
 
 let batchResults = {};
 
-async function processAllBatches({docs, batchSize, esIndex}) {
+async function processAllBatches({docs, startFrom, batchSize, esIndex}) {
     let batchId;
     let startTime;
     try {
@@ -319,7 +320,7 @@ async function processAllBatches({docs, batchSize, esIndex}) {
             while(targetTime > new Date().getTime()) {
                 let from = batchId * batchSize;
                 startTime = new Date();
-                let processedAck = await processBatch({docs, from, batchId, batchSize, esIndex: esIndex});
+                let processedAck = await processBatch({docs, startFrom, from, batchId, batchSize, esIndex: esIndex});
 
                 if(batchId % LOG_MOD === 0) {
                     batchResults[batchId] = {
@@ -333,14 +334,12 @@ async function processAllBatches({docs, batchSize, esIndex}) {
                 batchId++;
             }
 
-
-
         } else {
             for(batchId=0; (batchId*batchSize)<totalDocsCount; batchId++) {
                 let from = batchId * batchSize;
                 startTime = new Date();
     
-                let processedAck = await processBatch({docs, from, batchId, batchSize, esIndex: esIndex});
+                let processedAck = await processBatch({docs, startFrom, from, batchId, batchSize, esIndex: esIndex});
     
                 if(batchId % LOG_MOD === 0) {
                     batchResults[batchId] = {
@@ -379,7 +378,8 @@ function generateFetchQueries({docs, termsCount}) {
                 'bool': {
                     'filter': []
                 }
-            }
+            },
+            "_source": ["camp_info"]
         };
 
         for(let field of Object.keys(normalDoc)) {
@@ -407,7 +407,9 @@ function generateFetchQueries({docs, termsCount}) {
                 'bool': {
                     'filter': []
                 }
-            }
+            },
+            "_source": false,
+            "size": 50
         };
 
         for(let field of Object.keys(docWithMid)) {
@@ -421,9 +423,9 @@ function generateFetchQueries({docs, termsCount}) {
 
         let query = [];
         query.push({index: ES_INDEX_NAME});
-        query.push({query: query_normal, "_source": ["camp_info", "campaign_id"]});
+        query.push(query_normal);
         query.push({index: ES_INDEX_WITH_MID_NAME});
-        query.push({query_normal, "_source": false});
+        query.push(query_mid);
         queries.push(query);
     }
 
@@ -432,109 +434,106 @@ function generateFetchQueries({docs, termsCount}) {
 
 
 async function createRecords({docCount, batchSize}) {
-    let sourceSpace = {
-        mtype: ["normal", "corporate", "visitor", "kirana"],
-        dc: ["all", ...generateSeries({from: 1, count: 1000})],
-        ds: ["all", ...generateSeries({from: 1, count: 1000})],
-        bbstar: ["all", "true", "false"],
-        status: ['active', 'inactive'],
-        source: ['all', 'bigbasket'],
-        emails: ['all', ...generateEmails({count: 1000})],
-        phone_numbers: ['all', ...generatePhoneNumbers({count: 1000})],
-        cp: ['all', ...generateSeries({from: 1, count: 1000})],
-        entry_context: [...generateSeries({from: 1, count: 100})],
-        sa_city_ids: ['all', ...generateSeries({from: 1, count: 500})],
-        sa_ids: ['all', ...generateSeries({from: 1, count: 1000})],
-        mid: ['all', ...generateSeries({from: 1, count: MIDS_SPACE_COUNT})],
-        campaign_id: [...generateSeries({from: 1000000, count: 20})],
-        c_sku_id: [...generateSeries({from: 1000000, count: 10000})],
-        c_brand: ['all', ...generateStrings({count: 1000})],
-        c_tlc: ['all', ...generateStrings({count: 1000})],
-        c_mlc: ['all', ...generateStrings({count: 1000})],
-        c_llc: ['all', ...generateStrings({count: 1000})],
-        c_group: ['all', ...generateStrings({count: 1000})],
-        r_sku_id: ['all', ...generateStrings({count: 1000})],
-        r_brand: ['all', ...generateStrings({count: 1000})],
-        r_tlc: ['all', ...generateStrings({count: 1000})],
-        r_mlc: ['all', ...generateStrings({count: 1000})],
-        r_llc: ['all', ...generateStrings({count: 1000})],
-        r_group: ['all', ...generateStrings({count: 1000})],
-        camp_info: ["{'\''entry_context'\'': [100, 8, 9], '\''offer_category'\'': '\''REGULAR'\'', '\''campaign_theme'\'': '\''[]'\'', '\''discount_type'\'': '\''PERCENT'\'', '\''member_specific'\'': 0, '\''category_breakup'\'': '\''0.00'\'', '\''vendor_breakup'\'': '\''100.00'\'', '\''reward_sku_id'\'': 10000148, '\''redemption_campaign_limit'\'': 9999999, '\''bbstar_campaign'\'': '\''true'\'', '\''redemption_member_limit'\'': 9999999, '\''discount_value'\'': '\''50.00'\'', '\''redemption_order_limit'\'': 9999999, '\''marketing_breakup'\'': '\''0.00'\''}"]
-    }
+    let batchId;
+    let totalDocsCount = TOTAL_DOCS_COUNT;
+
+    try {
+        let sourceSpace = {
+            mtype: ["normal", "corporate", "visitor", "kirana"],
+            dc: ["all", ...generateSeries({from: 1, count: 1000})],
+            ds: ["all", ...generateSeries({from: 1, count: 1000})],
+            bbstar: ["all", "true", "false"],
+            status: ['active', 'inactive'],
+            source: ['all', 'bigbasket'],
+            emails: ['all', ...generateEmails({count: 1000})],
+            phone_numbers: ['all', ...generatePhoneNumbers({count: 1000})],
+            cp: ['all', ...generateSeries({from: 1, count: 1000})],
+            entry_context: [...generateSeries({from: 1, count: 100})],
+            sa_city_ids: ['all', ...generateSeries({from: 1, count: 500})],
+            sa_ids: ['all', ...generateSeries({from: 1, count: 1000})],
+            mid: ['all', ...generateSeries({from: 1, count: MIDS_SPACE_COUNT})],
+            campaign_id: [...generateSeries({from: 1000000, count: 20})],
+            c_sku_id: [...generateSeries({from: 1000000, count: 10000})],
+            c_brand: ['all', ...generateStrings({count: 1000})],
+            c_tlc: ['all', ...generateStrings({count: 1000})],
+            c_mlc: ['all', ...generateStrings({count: 1000})],
+            c_llc: ['all', ...generateStrings({count: 1000})],
+            c_group: ['all', ...generateStrings({count: 1000})],
+            r_sku_id: ['all', ...generateStrings({count: 1000})],
+            r_brand: ['all', ...generateStrings({count: 1000})],
+            r_tlc: ['all', ...generateStrings({count: 1000})],
+            r_mlc: ['all', ...generateStrings({count: 1000})],
+            r_llc: ['all', ...generateStrings({count: 1000})],
+            r_group: ['all', ...generateStrings({count: 1000})],
+            camp_info: ["{'\''entry_context'\'': [100, 8, 9], '\''offer_category'\'': '\''REGULAR'\'', '\''campaign_theme'\'': '\''[]'\'', '\''discount_type'\'': '\''PERCENT'\'', '\''member_specific'\'': 0, '\''category_breakup'\'': '\''0.00'\'', '\''vendor_breakup'\'': '\''100.00'\'', '\''reward_sku_id'\'': 10000148, '\''redemption_campaign_limit'\'': 9999999, '\''bbstar_campaign'\'': '\''true'\'', '\''redemption_member_limit'\'': 9999999, '\''discount_value'\'': '\''50.00'\'', '\''redemption_order_limit'\'': 9999999, '\''marketing_breakup'\'': '\''0.00'\''}"]
+        }
 
 
-    console.log(`Generating records from space...`);
-    
-    let allDocs = generatePermutedDocs({sourceSpace: sourceSpace, count: docCount});
-    let writeDocs = [];
-    console.log(`Record generation success.`);
 
-    let startTime = new Date();
-    processAllBatches({docs: allDocs, batchSize: batchSize, esIndex: ES_INDEX_NAME})
-        .then((res) => { 
+        for(let i=0; i<docCount/MAX_DOCS_IN_ONE_GO; i++) {
+            console.log(`Generating records from space...`);
+            let allDocs = generatePermutedDocs({sourceSpace: sourceSpace, count: MAX_DOCS_IN_ONE_GO});
+            let writeDocs = [];
+            console.log(`Record generation success.`);
+
+            let startTime = new Date();
+            await processAllBatches({docs: allDocs, startFrom: (i*MAX_DOCS_IN_ONE_GO), batchSize: batchSize, esIndex: ES_INDEX_NAME})
             console.log({batchResults: batchResults, totalWriteTime: `${new Date() - startTime}ms`});
-            // Write data in 'Output.txt' .
-            // fs.writeFile(`saved_docs.json`, JSON.stringify({records: allDocs}), (err) => {
-            //     if (err) throw err;
-            //     console.log(`Records written to saved_docs.json`);
-            // })
-        })
-        .then(async (res2) => {
-            if(WITH_MID) {
-                let batchId;
-                let batchSize = 1;
-                let totalDocsCount = TOTAL_DOCS_COUNT;
-        
-                try {
-                    for(let i=0; i<docCount; i++) {
-                        let midCount = MIDS_COUNT_PER_DOC;
-                        let docWithMid = {
-                            mid: generateMids({sourceSpace: sourceSpace, size: midCount, addAll: (i%2 === 0)})
-                        }
-                                                
-                        console.log(`[${i}] Record generation success (with ${midCount} MID).`);
-                        
-                        batchId = i;
-                        let from = 0;
-                        let batchSize = 1;
-                        let startTime = new Date();
-            
-                        let processedAck = await processBatch({docs: [docWithMid], from, batchId, batchSize, esIndex: ES_INDEX_WITH_MID_NAME});
-            
-                        if(batchId % LOG_MOD === 0) {
-                            batchResults[batchId] = {
-                                timeElapsed: `${new Date() - startTime}ms`,
-                                totalDocsCount: totalDocsCount,
-                                from: from,
-                                batchSize: batchSize                     
-                            }
-                            console.log(`[success] batch: ${batchId} | ${new Date() - startTime}ms`);
-                        }
 
-                        let minDocWithMid = { mid: docWithMid['mid'].slice(1, 4) };
-                        writeDocs.push(allDocs[i]);
-                        writeDocs.push(minDocWithMid);
-                    }
-                    // Write data in 'Output.txt' .
-                    fs.writeFile(`saved_docs.json`, JSON.stringify({records: writeDocs}), (err) => {
-                        if (err) throw err;
-                        console.log(`Records written to saved_docs.json`);
-                    })
-                        
-                } catch(e) {
-                    batchResults[batchId] = {
-                        error: e.stack,
-                        totalDocsCount: totalDocsCount,
-                        batchId: batchId,
-                        batchSize: batchSize                     
-                    }
-                    console.log(`[error] batch (with mid): ${batchId} | ${new Date() - startTime}ms, error: ${e.stack}`);
-                }
+            if(!WITH_MID) {
+                continue;
             }
-        })
-        .catch((e) => {
-            console.log({batchResults: batchResults, totalWriteTime: `${new Date() - startTime}ms`, error: e});
-        });
+    
+            try {
+                for(let i=0; i<docCount; i++) {
+                    let midCount = MIDS_COUNT_PER_DOC;
+                    let docWithMid = {
+                        mid: generateMids({sourceSpace: sourceSpace, size: midCount, addAll: (i%2 === 0)})
+                    }
+                                            
+                    console.log(`[${i}] Record generation success (with ${midCount} MID).`);
+                    
+                    batchId = i;
+                    from = 0;
+                    batchSize = 1;
+                    startTime = new Date();
+        
+                    let processedAck = await processBatch({docs: [docWithMid], from, batchId, batchSize, esIndex: ES_INDEX_WITH_MID_NAME});
+        
+                    if(batchId % LOG_MOD === 0) {
+                        batchResults[batchId] = {
+                            timeElapsed: `${new Date() - startTime}ms`,
+                            totalDocsCount: totalDocsCount,
+                            from: from,
+                            batchSize: batchSize                     
+                        }
+                        console.log(`[success] batch: ${batchId} | ${new Date() - startTime}ms`);
+                    }
+
+                    let minDocWithMid = { mid: docWithMid['mid'].slice(1, 4) };
+                    writeDocs.push(allDocs[i]);
+                    writeDocs.push(minDocWithMid);
+                }
+                // Write data in 'Output.txt' .
+                fs.writeFile(`saved_docs.json`, JSON.stringify({records: writeDocs}), (err) => {
+                    if (err) throw err;
+                    console.log(`Records written to saved_docs.json`);
+                })
+                    
+            } catch(e) {
+                batchResults[batchId] = {
+                    error: e.stack,
+                    totalDocsCount: totalDocsCount,
+                    batchId: batchId,
+                    batchSize: batchSize                     
+                }
+                console.log(`[error] batch (with mid): ${batchId} | ${new Date() - startTime}ms, error: ${e.stack}`);
+            }
+
+        }
+    } catch(e) {
+        console.log({batchResults: batchResults, totalWriteTime: `${new Date() - startTime}ms`, error: e});
+    }
 }
 
 async function fetchRecords({docCount, batchSize}) {
