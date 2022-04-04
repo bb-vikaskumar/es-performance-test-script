@@ -16,21 +16,22 @@ const fs = require('fs')
   
 const ES_INDEX_NAME = "camp_only";
 const ES_INDEX_WITH_MID_NAME = "mid_only";
-// const ELASTICSEARCH_IP = "https://vpc-es-benchmarking-test-tg4mvjtk2uzeba4wvby3hanfy4.us-east-1.es.amazonaws.com";
-const ELASTICSEARCH_IP = "http://127.0.0.1:9200";
+const ELASTICSEARCH_IP = "https://vpc-es-benchmarking-test-tg4mvjtk2uzeba4wvby3hanfy4.us-east-1.es.amazonaws.com";
+// const ELASTICSEARCH_IP = "http://127.0.0.1:9200";
 const ELASTICSEARCH_PORT = 443;
 
 const ACTIVITY_TYPE = 'create'; // create, fetch
-const TOTAL_DOCS_COUNT = 40;
-const MAX_DOCS_IN_ONE_GO = 20;
+const TOTAL_DOCS_COUNT = 1000000;
+const MAX_DOCS_IN_ONE_GO = 50000;
+const DOCS_TO_SAVE = 50000;
 const ACTIVITY_QTY_TYPE='count'  // time, count
-const BATCH_SIZE = 2;
+const BATCH_SIZE = 10;
 const SEARCH_DURATION_IN_MINS = 0.01;
 const WITH_MID = false;
 const MIDS_COUNT_PER_DOC = 250000;
 const MIDS_SPACE_COUNT = MIDS_COUNT_PER_DOC * 30;
 const MIDS_DOCUMENTS_PERCENT = 100;
-const LOG_MOD = 500; // every LOD_MOD record will get logged
+const LOG_MOD = 5000; // every LOD_MOD record will get logged
 const SEIGE_URLS_TO_KEEP = 3000;
 const ES_INDEX_FINAL = WITH_MID ? ES_INDEX_WITH_MID_NAME : ES_INDEX_NAME;
 
@@ -291,8 +292,8 @@ function processBatch({docs, startFrom, from, batchId, batchSize, esIndex=ES_IND
     return Promise.all(_.map(batchDocs, (doc, docIndex) => {
         let docId = startFrom + (batchId * batchSize) + docIndex;
         if(ACTIVITY_TYPE === 'create') {
-            console.log('write on ', '_doc: ', docId, ' | ', esIndex, ' : ', JSON.stringify(doc));
-            return demoPromise({returnVal: 'processed '+ docId+ '_'+ batchId, delay: 2000});
+            // console.log('write on ', '_doc: ', docId, ' | ', esIndex, ' : ', JSON.stringify(doc));
+            // return demoPromise({returnVal: 'processed '+ docId+ '_'+ batchId, delay: 2000});
             return ElasticSearchConnector.addDocument(esIndex, docId, doc);
         } else if(ACTIVITY_TYPE === 'fetch') {
             console.log('multisearch on ', esIndex, ' : ', JSON.stringify(doc));
@@ -436,6 +437,7 @@ function generateFetchQueries({docs, termsCount}) {
 async function createRecords({docCount, batchSize}) {
     let batchId;
     let totalDocsCount = TOTAL_DOCS_COUNT;
+    let startTime = new Date();
 
     try {
         let sourceSpace = {
@@ -469,22 +471,53 @@ async function createRecords({docCount, batchSize}) {
         }
 
 
+        const TOTAL_ITERATIONS = Math.max(docCount/MAX_DOCS_IN_ONE_GO, 1);
+        const DOCS_PER_ITERATION = Math.min(docCount, MAX_DOCS_IN_ONE_GO);
+        const DOCS_TO_SAVE_PER_ITERATION = DOCS_TO_SAVE / TOTAL_ITERATIONS;
+        const SAVE_DOCS_PER_ITERATION_SKIP = Math.max(0, Math.floor(DOCS_PER_ITERATION/DOCS_TO_SAVE_PER_ITERATION));
 
-        for(let i=0; i<docCount/MAX_DOCS_IN_ONE_GO; i++) {
-            console.log(`Generating records from space...`);
-            let allDocs = generatePermutedDocs({sourceSpace: sourceSpace, count: MAX_DOCS_IN_ONE_GO});
+        console.log('> TOTAL DOCS: ', docCount);
+        console.log('> DOCS_PER_ITERATION: ', DOCS_PER_ITERATION);
+        console.log('> TOTAL_ITERATIONS: ', TOTAL_ITERATIONS);
+        console.log('> TOTAL_DOCS_TO_SAVE: ', DOCS_TO_SAVE);
+        console.log('> DOCS_TO_SAVE_PER_ITERATION: ', DOCS_TO_SAVE_PER_ITERATION);
+        console.log('> SAVE_DOCS_PER_ITERATION_SKIP: ', SAVE_DOCS_PER_ITERATION_SKIP);
+        
+        fs.writeFile(`rally_docs.json`, '', (err) => {
+            if (err) throw err;
+            console.log(`Initiated file rally_docs.json`);
+        })
+
+        for(let k=0; k<TOTAL_ITERATIONS; k++) {
+            console.log(`[${k}/${docCount/MAX_DOCS_IN_ONE_GO}] Generating records from space...`);
+            let allDocs = generatePermutedDocs({sourceSpace: sourceSpace, count: DOCS_PER_ITERATION});
             let writeDocs = [];
             console.log(`Record generation success.`);
 
-            let startTime = new Date();
-            await processAllBatches({docs: allDocs, startFrom: (i*MAX_DOCS_IN_ONE_GO), batchSize: batchSize, esIndex: ES_INDEX_NAME})
-            console.log({batchResults: batchResults, totalWriteTime: `${new Date() - startTime}ms`});
+            startTime = new Date();
+            await processAllBatches({docs: allDocs, startFrom: (k*MAX_DOCS_IN_ONE_GO), batchSize: batchSize, esIndex: ES_INDEX_NAME})
+            console.log({k: k, batchResults: batchResults, totalWriteTime: `${new Date() - startTime}ms`});
+
+            for(let i=0; i<allDocs.length; i+=SAVE_DOCS_PER_ITERATION_SKIP) {
+                if(!allDocs[i]) {
+                    console.log('** error. WriteDocs undefined', {i, k});
+                }
+                fs.appendFile(`rally_docs.json`, JSON.stringify(allDocs[i])+'\n', (err) => {
+                    if (err) throw err;
+                })
+            }
+            console.log(`Record written to rally_docs.json`);
 
             if(!WITH_MID) {
                 continue;
             }
     
             try {
+                fs.writeFile(`rally_docs.json`, '', (err) => {
+                    if (err) throw err;
+                    console.log(`Initiated file rally_docs.json`);
+                })
+
                 for(let i=0; i<docCount; i++) {
                     let midCount = MIDS_COUNT_PER_DOC;
                     let docWithMid = {
@@ -504,10 +537,11 @@ async function createRecords({docCount, batchSize}) {
                         batchResults[batchId] = {
                             timeElapsed: `${new Date() - startTime}ms`,
                             totalDocsCount: totalDocsCount,
+                            k: k,
                             from: from,
                             batchSize: batchSize                     
                         }
-                        console.log(`[success] batch: ${batchId} | ${new Date() - startTime}ms`);
+                        console.log(`[success] [${i}/${docCount/MAX_DOCS_IN_ONE_GO}] batch: ${batchId} | ${new Date() - startTime}ms`);
                     }
 
                     let minDocWithMid = { mid: docWithMid['mid'].slice(1, 4) };
@@ -515,10 +549,20 @@ async function createRecords({docCount, batchSize}) {
                     writeDocs.push(minDocWithMid);
                 }
                 // Write data in 'Output.txt' .
-                fs.writeFile(`saved_docs.json`, JSON.stringify({records: writeDocs}), (err) => {
-                    if (err) throw err;
-                    console.log(`Records written to saved_docs.json`);
-                })
+                // fs.writeFile(`saved_docs.json`, JSON.stringify({records: writeDocs}), (err) => {
+                //     if (err) throw err;
+                //     console.log(`Records written to saved_docs.json`);
+                // })
+
+                for(let i=0; i<writeDocs.length; i+=2*SAVE_DOCS_PER_ITERATION_SKIP) {
+                    if(!writeDocs[i] || !writeDocs[i+1]) {
+                        console.log('** error. mid WriteDocs undefined', {i, k});
+                    }
+                    fs.appendFile(`rally_docs.json`, JSON.stringify(writeDocs[i])+'\n'+JSON.stringify(writeDocs[i])+'\n', (err) => {
+                        if (err) throw err;
+                    })
+                }
+                console.log(`Records written to rally_docs.json`);
                     
             } catch(e) {
                 batchResults[batchId] = {
