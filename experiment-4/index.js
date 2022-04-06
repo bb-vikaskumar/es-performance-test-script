@@ -498,7 +498,7 @@ async function createRecords({docCount, batchSize}) {
             await processAllBatches({docs: allDocs, startFrom: (k*MAX_DOCS_IN_ONE_GO), batchSize: batchSize, esIndex: ES_INDEX_NAME})
             console.log({k: k, batchResults: batchResults, totalWriteTime: `${new Date() - startTime}ms`});
 
-            for(let i=0; i<allDocs.length; i+=SAVE_DOCS_PER_ITERATION_SKIP) {
+            for(let i=0; i<allDocs.length; i+=SAVE_DOCS_PER_ITERATION_SKIP+1) {
                 if(!allDocs[i]) {
                     console.log('** error. WriteDocs undefined', {i, k});
                 }
