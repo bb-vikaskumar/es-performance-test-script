@@ -22,8 +22,8 @@ const ELASTICSEARCH_PORT = 443;
 
 const ACTIVITY_TYPE = 'create'; // create, fetch
 const TOTAL_DOCS_COUNT = 1000000;
-const MAX_DOCS_IN_ONE_GO = 50000;
-const DOCS_TO_SAVE = 50000;
+const MAX_DOCS_IN_ONE_GO = 20000;
+const DOCS_TO_SAVE = 1000;
 const ACTIVITY_QTY_TYPE='count'  // time, count
 const BATCH_SIZE = 10;
 const SEARCH_DURATION_IN_MINS = 0.01;
@@ -224,16 +224,16 @@ function pickOne({list}) {
 
 function generatePermutedDoc({sourceSpace, addMid}) {
     let doc = {
-        "mtype": generateCombination({list: sourceSpace.mtype, size: 1}),
-        "dc": generateCombination({list: sourceSpace.dc, size: 1}),
-        "ds": generateCombination({list: sourceSpace.ds, size: 2}),
+        "mtype": generateCombination({list: sourceSpace.mtype, size: 2}),
+        "dc": generateCombination({list: sourceSpace.dc, size: 2}),
+        "ds": generateCombination({list: sourceSpace.ds, size: 5}),
         "bbstar": generateCombination({list: sourceSpace.bbstar, size: 1}),
         "status": [pickOne({list: sourceSpace.status})],
         "source": generateCombination({list: sourceSpace.source, size: 1}),
-        "emails": generateCombination({list: sourceSpace.emails, size: 1}),
-        "phone_numbers": generateCombination({list: sourceSpace.phone_numbers, size: 1}),
+        "emails": generateCombination({list: sourceSpace.emails, size: 5}),
+        "phone_numbers": generateCombination({list: sourceSpace.phone_numbers, size: 5}),
         "cp": generateCombination({list: sourceSpace.cp, size: 2}),
-        "entry_context": generateCombination({list: sourceSpace.entry_context, size: 1}),
+        "entry_context": generateCombination({list: sourceSpace.entry_context, size: 2}),
         "sa_city_ids": generateCombination({list: sourceSpace.sa_city_ids, size: 1}),
         "sa_ids": generateCombination({list: sourceSpace.sa_ids, size: 1}),
         "campaign_id": pickOne({list: sourceSpace.campaign_id}),
