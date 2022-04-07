@@ -20,12 +20,13 @@ const ELASTICSEARCH_IP = "https://vpc-es-benchmarking-test-tg4mvjtk2uzeba4wvby3h
 // const ELASTICSEARCH_IP = "http://127.0.0.1:9200";
 const ELASTICSEARCH_PORT = 443;
 
+const progress = require('./progress.json');
 const ACTIVITY_TYPE = 'create'; // create, fetch
-const TOTAL_DOCS_COUNT = 1000000;
-const MAX_DOCS_IN_ONE_GO = 20000;
+const TOTAL_DOCS_COUNT = (progress.target - progress.done);
+const MAX_DOCS_IN_ONE_GO = 40000;
 const DOCS_TO_SAVE = 1000;
 const ACTIVITY_QTY_TYPE='count'  // time, count
-const BATCH_SIZE = 10;
+const BATCH_SIZE = 20;
 const SEARCH_DURATION_IN_MINS = 0.01;
 const WITH_MID = false;
 const MIDS_COUNT_PER_DOC = 250000;
@@ -477,6 +478,7 @@ async function createRecords({docCount, batchSize}) {
         const SAVE_DOCS_PER_ITERATION_SKIP = Math.max(0, Math.floor(DOCS_PER_ITERATION/DOCS_TO_SAVE_PER_ITERATION));
 
         console.log('> TOTAL DOCS: ', docCount);
+        console.log('> First DocID: ', progress.done);
         console.log('> DOCS_PER_ITERATION: ', DOCS_PER_ITERATION);
         console.log('> TOTAL_ITERATIONS: ', TOTAL_ITERATIONS);
         console.log('> TOTAL_DOCS_TO_SAVE: ', DOCS_TO_SAVE);
@@ -489,24 +491,31 @@ async function createRecords({docCount, batchSize}) {
         })
 
         for(let k=0; k<TOTAL_ITERATIONS; k++) {
+            let progressFile = {...progress, done: (progress.done + k*MAX_DOCS_IN_ONE_GO)};
+            fs.writeFile('progress.json', JSON.stringify(progressFile), (err) => {
+                if (err) throw err;
+            });
+
             console.log(`[${k}/${docCount/MAX_DOCS_IN_ONE_GO}] Generating records from space...`);
             let allDocs = generatePermutedDocs({sourceSpace: sourceSpace, count: DOCS_PER_ITERATION});
             let writeDocs = [];
             console.log(`Record generation success.`);
 
             startTime = new Date();
-            await processAllBatches({docs: allDocs, startFrom: (k*MAX_DOCS_IN_ONE_GO), batchSize: batchSize, esIndex: ES_INDEX_NAME})
+            await processAllBatches({docs: allDocs, startFrom: (progress.done + k*MAX_DOCS_IN_ONE_GO), batchSize: batchSize, esIndex: ES_INDEX_NAME})
             console.log({k: k, batchResults: batchResults, totalWriteTime: `${new Date() - startTime}ms`});
 
-            for(let i=0; i<allDocs.length; i+=SAVE_DOCS_PER_ITERATION_SKIP+1) {
-                if(!allDocs[i]) {
-                    console.log('** error. WriteDocs undefined', {i, k});
-                }
-                fs.appendFile(`rally_docs.json`, JSON.stringify(allDocs[i])+'\n', (err) => {
-                    if (err) throw err;
-                })
-            }
-            console.log(`Record written to rally_docs.json`);
+            // for(let i=0; i<allDocs.length; i+=SAVE_DOCS_PER_ITERATION_SKIP+1) {
+            //     if(!allDocs[i]) {
+            //         console.log('** error. WriteDocs undefined', {i, k});
+            //     }
+            //     fs.appendFile(`rally_docs.json`, JSON.stringify(allDocs[i])+'\n', (err) => {
+            //         if (err) throw err;
+            //     })
+            // }
+            // console.log(`Record written to rally_docs.json`);
+
+
 
             if(!WITH_MID) {
                 continue;
