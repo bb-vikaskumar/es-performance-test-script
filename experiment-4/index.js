@@ -24,7 +24,7 @@ const ELASTICSEARCH_PORT = 443;
 const progress = require('./progress.json');
 const ACTIVITY_TYPE = 'create'; // create, fetch
 const TOTAL_DOCS_COUNT = (progress.target - progress.done);
-const SKUS_PER_DOC = 2500;
+const SKUS_PER_DOC = 4;
 const DOCS_TO_SAVE = 1000;
 const ACTIVITY_QTY_TYPE='count'  // time, count
 const BATCH_SIZE = 2;
@@ -499,19 +499,19 @@ async function createRecords({docCount, batchSize}) {
 
             console.log(`[${k}/${TOTAL_ITERATIONS}] Generating records from space...`);
             let singleDoc = generatePermutedDocs({sourceSpace: sourceSpace, count: 1}).pop();
-            singleDoc['campaign_id'] = progress.done + k;
+            singleDoc['campaign_id'] = progress.done + k + 1;
             let allDocs = [];
             // console.log('** single Doc: ', singleDoc);
             for(let l=0; l<SKUS_PER_DOC; l++) {
                 let cloneDoc = _.cloneDeep(singleDoc);
-                cloneDoc.c_sku_id = cloneDoc.c_sku_id[l];
+                cloneDoc.c_sku_id = 100000 + l;
                 allDocs.push(_.cloneDeep(cloneDoc));
             }
             let writeDocs = [];
             console.log(`Record generation success.`);
 
             startTime = new Date();
-            await processAllBatches({docs: allDocs, campId: (progress.done + k), batchSize: batchSize, esIndex: ES_INDEX_NAME})
+            await processAllBatches({docs: allDocs, campId: singleDoc['campaign_id'], batchSize: batchSize, esIndex: ES_INDEX_NAME})
             console.log({k: k, batchResults: batchResults, totalWriteTime: `${new Date() - startTime}ms`});
 
             // for(let i=0; i<allDocs.length; i+=SAVE_DOCS_PER_ITERATION_SKIP+1) {
