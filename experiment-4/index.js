@@ -24,7 +24,7 @@ const ELASTICSEARCH_PORT = 443;
 const progress = require('./progress.json');
 const ACTIVITY_TYPE = 'create'; // create, fetch
 const TOTAL_DOCS_COUNT = (progress.target - progress.done);
-const SKUS_PER_DOC = 100;
+const SKUS_PER_DOC = 2500;
 const DOCS_TO_SAVE = 1000;
 const ACTIVITY_QTY_TYPE='count'  // time, count
 const BATCH_SIZE = 2;
@@ -294,8 +294,8 @@ function processBatch({docs, campId, from, batchId, batchSize, esIndex=ES_INDEX_
     return Promise.all(_.map(batchDocs, (doc, docIndex) => {
         let docId = `${campId}_${doc['c_sku_id']}`;
         if(ACTIVITY_TYPE === 'create') {
-            // console.log('write on ', '_doc: ', docId, ' | ', esIndex, ' : ', JSON.stringify(doc));
-            // return demoPromise({returnVal: 'processed '+ docId+ '_'+ batchId, delay: 2000});
+            console.log('write on ', '_doc: ', docId, ' | ', esIndex, ' : ', JSON.stringify(doc));
+            return demoPromise({returnVal: 'processed '+ docId+ '_'+ batchId, delay: 2000});
             return ElasticSearchConnector.addDocument(esIndex, docId, doc);
         } else if(ACTIVITY_TYPE === 'fetch') {
             console.log('multisearch on ', esIndex, ' : ', JSON.stringify(doc));
@@ -456,7 +456,7 @@ async function createRecords({docCount, batchSize}) {
             sa_city_ids: ['all', ...generateSeries({from: 1, count: 500})],
             sa_ids: ['all', ...generateSeries({from: 1, count: 1000})],
             mid: ['all', ...generateSeries({from: 1, count: MIDS_SPACE_COUNT})],
-            campaign_id: [...generateSeries({from: 1000000, count: 20})],
+            campaign_id: [...generateSeries({from: 1000000, count: progress.target})],
             c_sku_id: [...generateSeries({from: 1000000, count: 100000})],
             c_brand: ['all', ...generateStrings({count: 1000})],
             c_tlc: ['all', ...generateStrings({count: 1000})],
@@ -499,6 +499,7 @@ async function createRecords({docCount, batchSize}) {
 
             console.log(`[${k}/${TOTAL_ITERATIONS}] Generating records from space...`);
             let singleDoc = generatePermutedDocs({sourceSpace: sourceSpace, count: 1}).pop();
+            singleDoc['campaign_id'] = progress.done + k;
             let allDocs = [];
             // console.log('** single Doc: ', singleDoc);
             for(let l=0; l<SKUS_PER_DOC; l++) {
