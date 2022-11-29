@@ -14,23 +14,25 @@ let elasticsearch = require('elasticsearch');
 let _ = require('lodash');
 const fs = require('fs')
   
-const ES_INDEX_NAME = "camp_sku";
+const ES_INDEX_NAME = "camp_only";
 const ES_INDEX_WITH_MID_NAME = "mid_only";
 // const ELASTICSEARCH_IP = "https://vpc-es-benchmarking-test-tg4mvjtk2uzeba4wvby3hanfy4.us-east-1.es.amazonaws.com";
-const ELASTICSEARCH_IP = "https://vpc-es-benchmarking-test-2-wlmn37kd6ndwan6kfzdn6g3wdu.us-east-1.es.amazonaws.com/";
+// const ELASTICSEARCH_IP = "https://vpc-es-benchmarking-test-2-wlmn37kd6ndwan6kfzdn6g3wdu.us-east-1.es.amazonaws.com/";
+const ELASTICSEARCH_IP = "https://vpc-javelin-foundation-benchmark-zpaktgepgfvej56wqixqazqsy4.us-east-1.es.amazonaws.com:443";
+
 // const ELASTICSEARCH_IP = "http://127.0.0.1:9200";
-const ELASTICSEARCH_PORT = 443;
+const ELASTICSEARCH_PORT = 9200;
 
 const progress = require('./progress.json');
 const ACTIVITY_TYPE = 'create'; // create, fetch
 const TOTAL_DOCS_COUNT = (progress.target - progress.done);
-const SKUS_PER_DOC = 4;
+const SKUS_PER_DOC = 20;
 const DOCS_TO_SAVE = 1000;
 const ACTIVITY_QTY_TYPE='count'  // time, count
-const BATCH_SIZE = 2;
+const BATCH_SIZE = 500;
 const SEARCH_DURATION_IN_MINS = 0.01;
 const WITH_MID = false;
-const MIDS_COUNT_PER_DOC = 250000;
+const MIDS_COUNT_PER_DOC = 10;
 const MIDS_SPACE_COUNT = MIDS_COUNT_PER_DOC * 30;
 const MIDS_DOCUMENTS_PERCENT = 100;
 const LOG_MOD = 5000; // every LOD_MOD record will get logged
@@ -42,7 +44,8 @@ let savedRecordFile = `./saved_docs.json`;
 
 
 let esClient = new elasticsearch.Client({
-    host: ELASTICSEARCH_IP
+    host: ELASTICSEARCH_IP,
+    port: ELASTICSEARCH_PORT
 });
 
 
@@ -294,8 +297,8 @@ function processBatch({docs, campId, from, batchId, batchSize, esIndex=ES_INDEX_
     return Promise.all(_.map(batchDocs, (doc, docIndex) => {
         let docId = `${campId}_${doc['c_sku_id']}`;
         if(ACTIVITY_TYPE === 'create') {
-            console.log('write on ', '_doc: ', docId, ' | ', esIndex, ' : ', JSON.stringify(doc));
-            return demoPromise({returnVal: 'processed '+ docId+ '_'+ batchId, delay: 2000});
+            // console.log('write on ', '_doc: ', docId, ' | ', esIndex, ' : ', JSON.stringify(doc));
+            // return demoPromise({returnVal: 'processed '+ docId+ '_'+ batchId, delay: 2000});
             return ElasticSearchConnector.addDocument(esIndex, docId, doc);
         } else if(ACTIVITY_TYPE === 'fetch') {
             console.log('multisearch on ', esIndex, ' : ', JSON.stringify(doc));
